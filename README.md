@@ -59,5 +59,5 @@ msg.notificationOverride.interruptionLevel = "time-sensitive";
 msg.notificationOverride.tag = "xyzTag" // could be that you want to send the same message, but have it appear multiple times on the device rather than overwritten.
 msg.notificationOverride.clear = true; // will attempt to clear all messages to all specified devices in the setup or in msg.notificationOverride.services if overridden. I believe this currently isn't working because apple isn't allowing them to do this with the app. But they've petitioned for it... 
 ```
-and push it into the input of the node, it'll override any settings you have set at are above.
+and push it into the input of the node, it'll override any settings you have set.
 
