@@ -1859,6 +1859,7 @@
         "randomLast": "5",
         "randomUnits": "seconds",
         "drop": false,
+        "allowrate": false,
         "outputs": 1,
         "x": 720,
         "y": 320,
