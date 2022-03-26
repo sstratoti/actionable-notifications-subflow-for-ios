@@ -3,7 +3,7 @@
         "id": "6dc0247c.d7210c",
         "type": "subflow",
         "name": "iOS Actionable Notification",
-        "info": "[Documentation](https://zachowj.github.io/node-red-contrib-home-assistant-websocket/cookbook/actionable-notifications-subflow-for-ios.html)\n",
+        "info": "[Click here for latest Documentation](https://github.com/sstratoti/actionable-notifications-subflow-for-ios)\n",
         "category": "home_assistant",
         "in": [
             {
@@ -21,6 +21,14 @@
                 "wires": [
                     {
                         "id": "90ab222038404541",
+                        "port": 0
+                    },
+                    {
+                        "id": "3586791854cfef41",
+                        "port": 0
+                    },
+                    {
+                        "id": "6fdf5748e207aa7e",
                         "port": 0
                     }
                 ]
@@ -709,28 +717,28 @@
                 "type": "str",
                 "value": "active",
                 "ui": {
-                  "label": {"en-US": "Interruption Level"},
-                  "type": "select",
-                  "opts": {
-                    "opts": [
-                      {
-                        "l": {"en-US": "Passive (iOS 15+)"},
-                        "v": "passive"
-                      },
-                      {
-                        "l": {"en-US": "Active (Default)"},
-                        "v": "active"
-                      },
-                      {
-                        "l": {"en-US": "Time Sensitive (iOS 15+)"},
-                        "v": "time-sensitive"
-                      },
-                      {
-                        "l": {"en-US": "Critical"},
-                        "v": "critical"
-                      }
-                    ]
-                  }
+                    "label": {"en-US": "Interruption Level"},
+                    "type": "select",
+                    "opts": {
+                        "opts": [
+                            {
+                                "l": {"en-US": "Passive (iOS 15+)"},
+                                "v": "passive"
+                            },
+                            {
+                                "l": {"en-US": "Active (Default)"},
+                                "v": "active"
+                            },
+                            {
+                                "l": {"en-US": "Time Sensitive (iOS 15+)"},
+                                "v": "time-sensitive"
+                            },
+                            {
+                                "l": {"en-US": "Critical"},
+                                "v": "critical"
+                            }
+                        ]
+                    }
                 }
             },
             {
@@ -1548,7 +1556,7 @@
         "type": "function",
         "z": "6dc0247c.d7210c",
         "name": "create service call",
-        "func": "\nmsg._originalPayload = msg.payload;\nflow.set('latestMessage', msg);\n\nvar xTitle = \"\";\nvar xSubtitle = \"\";\nvar xMessage = \"\";\nvar xServices = \"\";\nvar xTag = \"\";\nvar xUrl = \"\";\nvar xCameraEntity = \"\";\n\n// overrides\nif (typeof msg.notificationOverride !== 'undefined' && msg.notificationOverride !== null) {\n    if (typeof msg.notificationOverride.title !== 'undefined' && msg.notificationOverride.title !=='' && msg.notificationOverride.title !== null){\n        xTitle = msg.notificationOverride.title;\n    } else {\n        xTitle = env.get('title');\n    }\n    if (typeof msg.notificationOverride.subtitle !== 'undefined' && msg.notificationOverride.subtitle !==''  && msg.notificationOverride.subtitle !== null){\n        xSubtitle = msg.notificationOverride.subtitle;\n    } else {\n        xSubtitle = env.get('subtitle');\n    }\n    if (typeof msg.notificationOverride.message !== 'undefined' && msg.notificationOverride.message !=='' &&  msg.notificationOverride.message !== null){\n        xMessage = msg.notificationOverride.message;\n    } else {\n        xMessage = env.get('message');\n    }\n    if (typeof msg.notificationOverride.url !== 'undefined' && msg.notificationOverride.url !=='' &&  msg.notificationOverride.url !== null){\n        xUrl = msg.notificationOverride.url;\n    } else {\n        xUrl = env.get('notificationUrl');\n    }\n    if (typeof msg.notificationOverride.services !== 'undefined' && msg.notificationOverride.services !=='' && msg.notificationOverride.services !== null){\n        xServices = msg.notificationOverride.services;\n    } else {\n        xServices = env.get('service');\n    }\n    if (typeof msg.notificationOverride.cameraEntity !== 'undefined' && msg.notificationOverride.cameraEntity !=='' && msg.notificationOverride.cameraEntity !== null){\n        xCameraEntity = msg.notificationOverride.cameraEntity;\n    } else {\n        xCameraEntity = env.get('cameraEntity');\n    }\n    flow.set('service', xServices);\n    if (typeof msg.notificationOverride.tag !== 'undefined' && msg.notificationOverride.tag !=='' && msg.notificationOverride.tag !== null){\n        xTag = msg.notificationOverride.tag;\n    } else {\n        if (env.get('tag') !== '') {\n            xTag = `${env.get('tag').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}`;\n        } else {\n            // need to still set this to something in case clear_notification is sent.\n            xTag = `${env.get('title').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}_${flow.get('random')}`;\n        } \n    }\n    flow.set('tag',xTag);\n} else {\n    // If no override is sent in...\n    if (env.get('tag') !== '') {\n        xTag = `${env.get('tag').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}`;\n    } else {\n        // need to still set this to something in case clear_notification is sent.\n        xTag = `${env.get('title').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}_${flow.get('random')}`;\n    } \n    flow.set('tag',xTag);\n    \n    xServices = env.get('service');\n    flow.set('service', xServices);\n    \n    xTitle = env.get('title');\n    xSubtitle = env.get('subtitle');\n    xMessage = env.get('message');\n    xUrl = env.get('notificationUrl');\n    xCameraEntity = env.get('cameraEntity');\n}\n\n\n\nconst services = flow.get('service');\nif(!services) {\n    node.status({\n        text: 'no services defined',\n        shape: 'ring',\n        fill: 'red'\n    });\n    return;    \n} else if (services == \"NOONE\"){\n    node.status({\n        text: 'No one to send to',\n        shape: 'ring',\n        fill: 'yellow'\n    });\n    return;\n}\n\n\n\n// create actions\nconst actions = [];\n[1,2,3,4].forEach(i => {\n    const name = `action${i}`\n    if (env.get(`${name}Title`) !== ''){\n        const action = env.get(`${name}Title`).replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase();\n        const title = env.get(`${name}Title`);\n        const activationMode = env.get(`${name}ActivationMode`);  \n        \n        const uri = env.get(`${name}Uri`);\n        const textInputButtonTitle = env.get(`${name}TextInputButtonTitle`);\n        const textInputPlaceholder = env.get(`${name}TextInputPlaceHolder`);\n        const authenticationRequired = env.get(`${name}AuthenticationRequired`);\n        const destructive = env.get(`${name}Destructive`);\n        const behavior = env.get(`${name}Behavior`);\n        const icon = env.get(`${name}Icon`);\n        \n        const actionObject = {};\n        actionObject.action = action;\n        actionObject.title = title;\n        actionObject.activationMode = activationMode;\n        \n        if (uri != \"\") actionObject.uri = uri;\n        if (textInputButtonTitle != \"\") actionObject.textInputButtonTitle = textInputButtonTitle;\n        if (textInputPlaceholder != \"\") actionObject.textInputPlaceholder = textInputPlaceholder;\n        if (authenticationRequired != \"\") actionObject.authenticationRequired = authenticationRequired;\n        if (destructive != \"\") actionObject.destructive = destructive;\n        if (behavior != \"\") actionObject.behavior = behavior;\n        if (icon != \"\") actionObject.icon = icon;\n        \n        actions.push(actionObject);\n    }\n});\n\n// create msg object\n\nmsg.payload = {\n        domain: 'notify',\n        data: {\n            title: xTitle,\n            message: xMessage,\n            data: {\n                push: {},\n                tag: xTag\n            }\n        }\n    };\n\nif (actions.length > 0) {\n    msg.payload.data.data.action_data = {tag: xTag};\n    msg.payload.data.data.actions = actions;\n    \n}\n\n\n// notification url\nif (xUrl !== \"\") {\n    msg.payload.data.data.url = {};\n    msg.payload.data.data.url = xUrl;\n}\n\n// subtitle\nif (xSubtitle !== '') {\n    msg.payload.data.data.subtitle = xSubtitle;\n}\n\n// sound information\nmsg.payload.data.data.push.sound = {};\nif (env.get('customSound').length > 0){\n    msg.payload.data.data.push.sound.name = env.get('customSound');\n} else if (env.get('customSoundPreInstalled').length > 0) {\n    msg.payload.data.data.push.sound.name = env.get('customSoundPreInstalled');\n} else {\n    msg.payload.data.data.push.sound.name = 'default';\n}\nif (env.get('isCriticalNotification')) {\n    msg.payload.data.data.push.sound.critical = 1;\n    msg.payload.data.data.push.sound.volume = 1.0;\n}\n\n// group thread id\nif (env.get('group') !== '') {\n    msg.payload.data.data.group = env.get('group');\n}\n\n// Map Information\nif (env.get('latitudeFirst') !== 0 && env.get('longitudeFirst') !== 0){\n    msg.payload.data.data.action_data.latitude = env.get('latitudeFirst');\n    msg.payload.data.data.action_data.longitude = env.get('longitudeFirst');\n    if (env.get('latitudeSecond') !== 0 && env.get('longitudeSecond') !== 0){\n        msg.payload.data.data.action_data.second_latitude = env.get('latitudeSecond');\n        msg.payload.data.data.action_data.second_longitude = env.get('longitudeSecond');\n        // add in all the extras, which default to false.\n        msg.payload.data.data.action_data.shows_line_between_points = env.get('showLineBetweenPoints');\n        msg.payload.data.data.action_data.shows_compass = env.get('showCompass');\n        msg.payload.data.data.action_data.shows_points_of_interest = env.get('showPointsOfInterest');\n        msg.payload.data.data.action_data.shows_scale = env.get('showScale');\n        msg.payload.data.data.action_data.shows_traffic = env.get('showTraffic');\n        msg.payload.data.data.action_data.shows_user_location = env.get('showUserLocation');\n    }\n}\n// camera information\nif (xCameraEntity !== '') {\n    msg.payload.data.data.entity_id = xCameraEntity;\n}\n// media information\nif (env.get('contentUrl') !== '') {\n\n} else {\n    if (env.get('imagePath') !== '') {\n        msg.payload.data.data.image = env.get('imagePath');\n    }\n    if (env.get('videoPath') !== '') {\n        msg.payload.data.data.video = env.get('videoPath');\n    }\n    if (env.get('audioPath') !== '') {\n        msg.payload.data.data.audio = env.get('audioPath');\n    }\n}\nif (env.get('contentUrl') !== '' || env.get('imagePath') !== '' || env.get('videoPath') !== '' || env.get('audioPath') !== '') {\n    if (env.get('lazyLoading')) {\n        msg.payload.data.data.lazy = env.get('lazyLoading');\n    }\n    if (env.get('hideThumbnail')) {\n        msg.payload.data.data.attachment = {};\n        msg.payload.data.data.attachment['hide-thumbnail'] = env.get('hideThumbnail');\n    }\n}\n\nservices.trim().split(/,\\s*/).forEach(service => {\n    if(!service) return;\n    msg.payload.service = service;\n    node.send(msg);\n});\n\nnode.done();",
+        "func": "msg._originalPayload = msg.payload;\nlet flow_msg_variables = {\n  tag: '',\n  service: '',\n  message: msg,\n  date_created: Date.now()\n}\n\nvar xTitle = \"\";\nvar xSubtitle = \"\";\nvar xMessage = \"\";\nvar xServices = \"\";\nvar xTag = \"\";\nvar xUrl = \"\";\nvar xCameraEntity = \"\";\nvar xInterruptionLevel = \"\";\n\n// overrides\nif (typeof msg.notificationOverride !== 'undefined' && msg.notificationOverride !== null) {\n    if (typeof msg.notificationOverride.title !== 'undefined' && msg.notificationOverride.title !=='' && msg.notificationOverride.title !== null){\n        xTitle = msg.notificationOverride.title;\n    } else {\n        xTitle = env.get('title');\n    }\n    if (typeof msg.notificationOverride.subtitle !== 'undefined' && msg.notificationOverride.subtitle !==''  && msg.notificationOverride.subtitle !== null){\n        xSubtitle = msg.notificationOverride.subtitle;\n    } else {\n        xSubtitle = env.get('subtitle');\n    }\n    if (typeof msg.notificationOverride.message !== 'undefined' && msg.notificationOverride.message !=='' &&  msg.notificationOverride.message !== null){\n        xMessage = msg.notificationOverride.message;\n    } else {\n        xMessage = env.get('message');\n    }\n    if (typeof msg.notificationOverride.url !== 'undefined' && msg.notificationOverride.url !=='' &&  msg.notificationOverride.url !== null){\n        xUrl = msg.notificationOverride.url;\n    } else {\n        xUrl = env.get('notificationUrl');\n    }\n    if (typeof msg.notificationOverride.services !== 'undefined' && msg.notificationOverride.services !=='' && msg.notificationOverride.services !== null){\n        xServices = msg.notificationOverride.services;\n    } else {\n        xServices = env.get('service');\n    }\n    if (typeof msg.notificationOverride.cameraEntity !== 'undefined' && msg.notificationOverride.cameraEntity !=='' && msg.notificationOverride.cameraEntity !== null){\n        xCameraEntity = msg.notificationOverride.cameraEntity;\n    } else {\n        xCameraEntity = env.get('cameraEntity');\n    }\n    \n    if (typeof msg.notificationOverride.interruptionLevel !== 'undefined' && msg.notificationOverride.interruptionLevel !=='' && msg.notificationOverride.interruptionLevel !== null){\n        xInterruptionLevel = msg.notificationOverride.interruptionLevel;\n    } else {\n        xInterruptionLevel = env.get('interruptionLevel');\n    }\n    \n    flow_msg_variables.service=xServices;\n    if (typeof msg.notificationOverride.tag !== 'undefined' && msg.notificationOverride.tag !=='' && msg.notificationOverride.tag !== null){\n        xTag = msg.notificationOverride.tag.replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase();\n    } else {\n        if (env.get('tag') !== '') {\n            xTag = `${env.get('tag').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}`;\n        } else {\n            // need to still set this to something in case clear_notification is sent.\n            xTag = `${env.get('title').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}_${flow.get('random')}`;\n        } \n    }\n//support multiple tags per flow\n  flow_msg_variables.tag=xTag;\n} else {\n    // If no override is sent in...\n    if (env.get('tag') !== '') {\n        xTag = `${env.get('tag').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}`;\n    } else {\n        // need to still set this to something in case clear_notification is sent.\n        xTag = `${env.get('title').replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()}_${flow.get('random')}`;\n    } \n    //support multiple tags per flow\n    //  flow.set('tag',xTag);\n    flow_msg_variables.tag=xTag;\n    \n    xServices = env.get('service');\n    flow_msg_variables.service=xServices;\n\n    xTitle = env.get('title');\n    xSubtitle = env.get('subtitle');\n    xMessage = env.get('message');\n    xUrl = env.get('notificationUrl');\n    xCameraEntity = env.get('cameraEntity');\n    xInterruptionLevel = env.get('interruptionLevel');\n}\n\nlet all_flow_messages= flow.get('flow_messages');\nif (!all_flow_messages){\n  all_flow_messages=[];\n}\nlet new_flow_messages=[];\nfor(var i=0;i<all_flow_messages.length;i++){//copy (and reset) the messages array\n  if ((all_flow_messages[i].tag==flow_msg_variables.tag)&&(all_flow_messages[i].service==flow_msg_variables.service)){\n    continue;//don't copy this message\n  }else{\n    if (Date.now()-all_flow_messages[i].date_created<86400000){//only copy messages less than 24h old\n      new_flow_messages.push(all_flow_messages[i]);\n    }\n  }\n}\nnew_flow_messages.push(flow_msg_variables);\nflow.set('flow_messages',new_flow_messages);\n\nconst services = xServices;\nif(!services) {\n    node.status({\n        text: 'no services defined',\n        shape: 'ring',\n        fill: 'red'\n    });\n    return;    \n} else if (services == \"NOONE\"){\n    node.status({\n        text: 'No one to send to',\n        shape: 'ring',\n        fill: 'yellow'\n    });\n    return;\n}\n\n\n\n// create actions\nconst actions = [];\n[1,2,3,4].forEach(i => {\n    const name = `action${i}`\n    if (env.get(`${name}Title`) !== ''){\n        const action = env.get(`${name}Title`).replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase();\n        const title = env.get(`${name}Title`);\n        const activationMode = env.get(`${name}ActivationMode`);  \n        \n        const uri = env.get(`${name}Uri`);\n        const textInputButtonTitle = env.get(`${name}TextInputButtonTitle`);\n        const textInputPlaceholder = env.get(`${name}TextInputPlaceHolder`);\n        const authenticationRequired = env.get(`${name}AuthenticationRequired`);\n        const destructive = env.get(`${name}Destructive`);\n        const behavior = env.get(`${name}Behavior`);\n        const icon = env.get(`${name}Icon`);\n        \n        const actionObject = {};\n        actionObject.action = action;\n        actionObject.title = title;\n        actionObject.activationMode = activationMode;\n        \n        if (uri != \"\") actionObject.uri = uri;\n        if (textInputButtonTitle != \"\") actionObject.textInputButtonTitle = textInputButtonTitle;\n        if (textInputPlaceholder != \"\") actionObject.textInputPlaceholder = textInputPlaceholder;\n        if (authenticationRequired != \"\") actionObject.authenticationRequired = authenticationRequired;\n        if (destructive != \"\") actionObject.destructive = destructive;\n        if (behavior != \"\") actionObject.behavior = behavior;\n        if (icon != \"\") actionObject.icon = icon;\n        \n        actions.push(actionObject);\n    }\n});\n\n// create msg object\n\nmsg.payload = {\n        domain: 'notify',\n        data: {\n            title: xTitle,\n            message: xMessage,\n            data: {\n                push: {},\n                tag: xTag\n            }\n        }\n    };\n\nif (actions.length > 0) {\n    msg.payload.data.data.action_data = {tag: xTag};\n    msg.payload.data.data.actions = actions;\n    \n}\n\n\n// notification url\nif (xUrl !== \"\") {\n    msg.payload.data.data.url = {};\n    msg.payload.data.data.url = xUrl;\n}\n\n// subtitle\nif (xSubtitle !== '') {\n    msg.payload.data.data.subtitle = xSubtitle;\n}\n\n// sound information\nmsg.payload.data.data.push.sound = {};\nif (env.get('customSound').length > 0){\n    msg.payload.data.data.push.sound.name = env.get('customSound');\n} else if (env.get('customSoundPreInstalled').length > 0) {\n  if(env.get('customSoundPreInstalled')=='none'){\n    msg.payload.data.data.push.sound = 'none';\n  }else{\n    msg.payload.data.data.push.sound.name = env.get('customSoundPreInstalled');\n  }\n} else {\n    msg.payload.data.data.push.sound.name = 'default';\n}\n\nif (env.get('isCriticalNotification')) {\n    msg.payload.data.data.push.sound.critical = 1;\n    msg.payload.data.data.push.sound.volume = 1.0;\n    msg.payload.data.data.push[\"interruption-level\"] = 'critical';\n} else {\n    // interruption level\n    if (xInterruptionLevel !== '') {\n        msg.payload.data.data.push[\"interruption-level\"] = xInterruptionLevel;\n        if (xInterruptionLevel == 'critical'){\n            msg.payload.data.data.push.sound.critical = 1;\n            msg.payload.data.data.push.sound.volume = 1.0;\n        }\n    }\n}\n\n \n\n// overrides interruption level\nif (env.get('isCriticalNotification') == true) {\n    \n}\n\n// group thread id\nif (env.get('group') !== '') {\n    msg.payload.data.data.group = env.get('group');\n}\n\n// Map Information\nif (env.get('latitudeFirst') !== 0 && env.get('longitudeFirst') !== 0){\n    msg.payload.data.data.action_data.latitude = env.get('latitudeFirst');\n    msg.payload.data.data.action_data.longitude = env.get('longitudeFirst');\n    if (env.get('latitudeSecond') !== 0 && env.get('longitudeSecond') !== 0){\n        msg.payload.data.data.action_data.second_latitude = env.get('latitudeSecond');\n        msg.payload.data.data.action_data.second_longitude = env.get('longitudeSecond');\n        // add in all the extras, which default to false.\n        msg.payload.data.data.action_data.shows_line_between_points = env.get('showLineBetweenPoints');\n        msg.payload.data.data.action_data.shows_compass = env.get('showCompass');\n        msg.payload.data.data.action_data.shows_points_of_interest = env.get('showPointsOfInterest');\n        msg.payload.data.data.action_data.shows_scale = env.get('showScale');\n        msg.payload.data.data.action_data.shows_traffic = env.get('showTraffic');\n        msg.payload.data.data.action_data.shows_user_location = env.get('showUserLocation');\n    }\n}\n// camera information\nif (xCameraEntity !== '') {\n    msg.payload.data.data.entity_id = xCameraEntity;\n}\n// media information\nif (env.get('contentUrl') !== '') {\n\n} else {\n    if (env.get('imagePath') !== '') {\n        msg.payload.data.data.image = env.get('imagePath');\n    }\n    if (env.get('videoPath') !== '') {\n        msg.payload.data.data.video = env.get('videoPath');\n    }\n    if (env.get('audioPath') !== '') {\n        msg.payload.data.data.audio = env.get('audioPath');\n    }\n}\nif (env.get('contentUrl') !== '' || env.get('imagePath') !== '' || env.get('videoPath') !== '' || env.get('audioPath') !== '') {\n    if (env.get('lazyLoading')) {\n        msg.payload.data.data.lazy = env.get('lazyLoading');\n    }\n    if (env.get('hideThumbnail')) {\n        msg.payload.data.data.attachment = {};\n        msg.payload.data.data.attachment['hide-thumbnail'] = env.get('hideThumbnail');\n    }\n}\n\nservices.trim().split(/,\\s*/).forEach(service => {\n    if(!service) return;\n    msg.payload.service = service;\n    node.send(msg);\n});\n\nnode.done();",
         "outputs": 1,
         "noerr": 0,
         "initialize": "flow.set('random',Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 5).toUpperCase());",
@@ -1623,7 +1631,7 @@
         "type": "function",
         "z": "6dc0247c.d7210c",
         "name": "build message",
-        "func": "const latestMessage = flow.get('latestMessage');\nconst event = msg.payload.event;\n\n\nlatestMessage.payload = latestMessage._originalPayload;\nlatestMessage.eventData = msg.payload;\ndelete latestMessage._originalPayload;\n\nif(env.get('userInfo')) {\n    const userData = msg.userData.find(u => u.id === msg.payload.context.user_id);\n    latestMessage.userData = userData;\n}\nnode.warn('title: ' + env.get('title'));\nnode.warn('1: ' + env.get(`action1Title`));\nnode.warn('2: ' + env.get(`action2Title`));\nnode.warn('3: ' + env.get(`action3Title`));\nnode.warn('4: ' + env.get(`action4Title`));\n\nconst index = [1,2,3,4].find(i => env.get(`action${i}Title`).replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase() === event.actionName);\nflow.set(\"responseIndex\",index);\nnode.status({\n    text: `${env.get(`action${index}Title`).replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()} at: ${getPrettyDate()}`,\n    shape: 'dot',\n    fill: 'green'\n});\n\nreturn latestMessage;\n\n\nfunction getPrettyDate() {\n    return new Date().toLocaleDateString('en-US', {\n        month: 'short',\n        day: 'numeric',\n        hour12: false,\n        hour: 'numeric',\n        minute: 'numeric',\n    });\n}",
+        "func": "const latestMessage = flow.get('latestMessage');\nconst event = msg.payload.event;\n\nlatestMessage.payload = latestMessage._originalPayload;\nlatestMessage.eventData = msg.payload;\ndelete latestMessage._originalPayload;\n\nif(env.get('userInfo')) {\n    const userData = msg.userData.find(u => u.id === msg.payload.context.user_id);\n    latestMessage.userData = userData;\n}\n\nconst index = [1,2,3,4].find(i => env.get(`action${i}Title`).replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase() === event.actionName);\nflow.set(\"responseIndex\",index);\nnode.status({\n    text: `${env.get(`action${index}Title`).replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase()} at: ${getPrettyDate()}`,\n    shape: 'dot',\n    fill: 'green'\n});\n\nreturn latestMessage;\n\n\nfunction getPrettyDate() {\n    return new Date().toLocaleDateString('en-US', {\n        month: 'short',\n        day: 'numeric',\n        hour12: false,\n        hour: 'numeric',\n        minute: 'numeric',\n    });\n}",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -1633,29 +1641,6 @@
         "y": 380,
         "wires": [
             ["90ab222038404541"]
-        ]
-    },
-    {
-        "id": "a7d52acc08b671e0",
-        "type": "switch",
-        "z": "6dc0247c.d7210c",
-        "name": "belongs here?",
-        "property": "payload.event.action_data.tag",
-        "propertyType": "msg",
-        "rules": [
-            {
-                "t": "eq",
-                "v": "tag",
-                "vt": "flow"
-            }
-        ],
-        "checkall": "true",
-        "repair": false,
-        "outputs": 1,
-        "x": 412,
-        "y": 256,
-        "wires": [
-            ["a69ed312811b3a6d"]
         ]
     },
     {
@@ -1750,7 +1735,7 @@
         "x": 164,
         "y": 256,
         "wires": [
-            ["a7d52acc08b671e0"]
+            ["86b12904f73a0329"]
         ]
     },
     {
@@ -1783,7 +1768,7 @@
         "type": "function",
         "z": "6dc0247c.d7210c",
         "name": "create CLEAR service call",
-        "func": "msg._originalPayload = msg.payload;\nflow.set('latestMessage', msg);\n\nvar clearAll = false;\nvar services = \"\";\n\nif (typeof msg.notificationOverride !== 'undefined') {\n    if (typeof msg.notificationOverride.clear !== 'undefined' && msg.notificationOverride.clear !== null && msg.notificationOverride.clear) {\n        clearAll = true;\n    }\n    \n    if (typeof msg.notificationOverride.services !== 'undefined' && msg.notificationOverride.services !== null && msg.notificationOverride.services){\n        services = msg.notificationOverride.services;\n    } else {\n        services = flow.get('service');\n    }\n} else {\n    services = flow.get('service');\n}\n\nif(!services) {\n    node.status({\n        text: 'no services defined',\n        shape: 'ring',\n        fill: 'red'\n    });\n    return;    \n}\n\n// create ios msg object\n\nmsg.payload = {\n        domain: 'notify',\n        data: {\n            message: \"clear_notification\",\n            data: {\n                tag: flow.get('tag'),\n            }\n        }\n    };\n\nfunction getPrettyDate() {\n    return new Date().toLocaleDateString('en-US', {\n        month: 'short',\n        day: 'numeric',\n        hour12: false,\n        hour: 'numeric',\n        minute: 'numeric',\n    });\n}\n\nif (clearAll){\n    delete msg.notificationOverride;\n}\n    \nvar xCountCleared = 0;\nservices.trim().split(/,\\s*/).forEach(service => {\n    if(!service) return;\n    // only clear on devices that didn't send the event.\n    \n    if (clearAll){\n        msg.payload.service = service;\n        node.send(msg);\n        xCountCleared++;\n    } else if (!service.includes(msg._originalPayload.event.sourceDeviceID)){\n        msg.payload.service = service;\n        node.send(msg);\n        xCountCleared++;\n    }\n});\nif (xCountCleared > 0) {\n    node.status({\n        text: `${xCountCleared} messages cleared at: ${getPrettyDate()}`,\n        shape: 'dot',\n        fill: 'blue'\n    });\n} else {\n    node.status({\n        text: `No messages cleared: ${getPrettyDate()}`,\n        shape: 'dot',\n        fill: 'red'\n    });\n}",
+        "func": "msg._originalPayload = msg.payload;\nvar tag_to_clear = \"\";\nvar services = \"\";\nvar clearAll = false;\nif (typeof msg.notificationOverride !== 'undefined') {\n    if (typeof msg.notificationOverride.clear !== 'undefined' && msg.notificationOverride.clear !== null && msg.notificationOverride.clear) {\n        clearAll = true;\n    }\n    if (typeof msg.notificationOverride.services !== 'undefined' && msg.notificationOverride.services !== null && msg.notificationOverride.services){\n        services = msg.notificationOverride.services;\n    }\n    if (typeof msg.notificationOverride.tag !== 'undefined' && msg.notificationOverride.tag !== null && msg.notificationOverride.tag){\n        tag_to_clear = msg.notificationOverride.tag.replace(/[^\\w\\s]/gi, '').replace(/\\s+/g,'_').toUpperCase();//formatting tags as sent to the phone before\n    }\n}\n\nif (tag_to_clear==\"\"){//no specific tag sent, clear the last message.\n  var all_flow_messages= flow.get('flow_messages');\n  if(all_flow_messages) {\n    var last_message= all_flow_messages.pop();\n    if (last_message){//on nodeRED restart\n      tag_to_clear= last_message.tag;\n      services = last_message.service;//override service to the one used in last message sent\n      flow.set('flow_messages',all_flow_messages);//clear the message from memory\n    }\n  }\n}\n\nif(services==\"\") {\n    node.status({\n        text: 'no services defined',\n        shape: 'ring',\n        fill: 'red'\n    });\n    return;    \n}\n\nif(tag_to_clear==\"\") {\n  node.status({\n    text: 'no messages to delete',\n    shape: 'ring',\n    fill: 'red'\n  });\n  return;  \n}\n\n// create ios msg object\n\nmsg.payload = {\n        domain: 'notify',\n        data: {\n            message: \"clear_notification\",\n            data: {\n                tag: tag_to_clear\n            }\n        }\n    };\n\nfunction getPrettyDate() {\n    return new Date().toLocaleDateString('en-US', {\n        month: 'short',\n        day: 'numeric',\n        hour12: false,\n        hour: 'numeric',\n        minute: 'numeric',\n    });\n}\n\nif (clearAll){\n    delete msg.notificationOverride;\n}\n    \nvar xCountCleared = 0;\nservices.trim().split(/,\\s*/).forEach(service => {\n    if(!service) return;\n    // only clear on devices that didn't send the event.\n    if (clearAll){\n        msg.payload.service = service;\n        node.send(msg);\n        xCountCleared++;\n    } else if (!service.includes(msg._originalPayload.event.sourceDeviceID)){\n        msg.payload.service = service;\n        node.send(msg);\n        xCountCleared++;\n    }\n});\nif (xCountCleared > 0) {\n    node.status({\n        text: `${xCountCleared} messages cleared at: ${getPrettyDate()}`,\n        shape: 'dot',\n        fill: 'blue'\n    });\n} else {\n    node.status({\n        text: `No messages cleared: ${getPrettyDate()}`,\n        shape: 'dot',\n        fill: 'red'\n    });\n}",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -1911,6 +1896,7 @@
         "randomLast": "5",
         "randomUnits": "seconds",
         "drop": false,
+        "allowrate": false,
         "outputs": 1,
         "x": 970,
         "y": 160,
@@ -1938,6 +1924,24 @@
         "y": 80,
         "wires": [
             ["fcf9f9c27469a607"]
+        ]
+    },
+    {
+        "id": "86b12904f73a0329",
+        "type": "function",
+        "z": "6dc0247c.d7210c",
+        "name": "belongs here?",
+        "func": "let msg_tag=msg.payload.event.action_data.tag;\nlet all_flow_messages= flow.get('flow_messages');\nif(all_flow_messages){\n    for (var i=0;i<all_flow_messages.length;i++){\n        if (all_flow_messages[i].tag.trim()==msg_tag.trim()){\n            flow.set('latestMessage',all_flow_messages[i].message);\n            return [msg,null];\n        }\n    }\n}\nreturn [null,msg];\n",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 260,
+        "wires": [
+            ["a69ed312811b3a6d"],
+            []
         ]
     }
 ]
