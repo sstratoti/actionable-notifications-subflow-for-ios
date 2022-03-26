@@ -162,6 +162,10 @@
                                 "v": "default"
                             },
                             {
+                                "l": {"en-US": "No Sound"},
+                                "v": "none"
+                            },
+                            {
                                 "l": {"en-US": "US-EN-Alexa-Back-Door-Opened.wav"},
                                 "v": "US-EN-Alexa-Back-Door-Opened.wav"
                             },
