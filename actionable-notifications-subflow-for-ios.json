@@ -705,6 +705,35 @@
                 }
             },
             {
+                "name": "interruptionLevel",
+                "type": "str",
+                "value": "active",
+                "ui": {
+                  "label": {"en-US": "Interruption Level"},
+                  "type": "select",
+                  "opts": {
+                    "opts": [
+                      {
+                        "l": {"en-US": "Passive (iOS 15+)"},
+                        "v": "passive"
+                      },
+                      {
+                        "l": {"en-US": "Active (Default)"},
+                        "v": "active"
+                      },
+                      {
+                        "l": {"en-US": "Time Sensitive (iOS 15+)"},
+                        "v": "time-sensitive"
+                      },
+                      {
+                        "l": {"en-US": "Critical"},
+                        "v": "critical"
+                      }
+                    ]
+                  }
+                }
+            },
+            {
                 "name": "userInfo",
                 "type": "bool",
                 "value": "false",
