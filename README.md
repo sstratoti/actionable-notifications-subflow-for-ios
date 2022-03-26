@@ -55,6 +55,7 @@ msg.notificationOverride.message = "Some new message like Battery is at " + msg.
 msg.notificationOverride.url = "/hacs";
 msg.notificationOverride.services = "my_phone, partners_phone, kids_phone"; //could override this depending on who is "home".
 msg.notificationOverride.cameraEntity = "camera.my_back_yard";
+msg.notificationOverride.interruptionLevel = "time-sensitive";
 msg.notificationOverride.tag = "xyzTag" // could be that you want to send the same message, but have it appear multiple times on the device rather than overwritten.
 msg.notificationOverride.clear = true; // will attempt to clear all messages to all specified devices in the setup or in msg.notificationOverride.services if overridden. I believe this currently isn't working because apple isn't allowing them to do this with the app. But they've petitioned for it... 
 ```
