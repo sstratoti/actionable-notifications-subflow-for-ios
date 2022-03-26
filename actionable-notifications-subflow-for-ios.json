@@ -4,7 +4,7 @@
         "type": "subflow",
         "name": "iOS Actionable Notification",
         "info": "[Documentation](https://zachowj.github.io/node-red-contrib-home-assistant-websocket/cookbook/actionable-notifications-subflow-for-ios.html)\n",
-        "category": "",
+        "category": "home_assistant",
         "in": [
             {
                 "x": 100,
