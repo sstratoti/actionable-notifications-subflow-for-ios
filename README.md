@@ -1,4 +1,4 @@
-# actionable-notifications-subflow-for-ios
+# Actionable Notifications Subflow for iOS
 Actionable Notifications Node-Red Subflow for Home Assistant Companion - iOS
 
 This was originally a gist [link](https://gist.github.com/sstratoti/8021c5a4ee8e34313c3f59ba20c4a83a) but I felt that a true github project would help with those that would like to submit issues, questions or pull requests. This way we can manage the code all in one place and people can follow it for updates.
