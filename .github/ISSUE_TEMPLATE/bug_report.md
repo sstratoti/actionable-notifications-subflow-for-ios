@@ -11,7 +11,9 @@ assignees: ''
 A clear and concise description of what the bug is.
 
 **Debug Output**
-Please follow the [steps outlined in the wiki](https://github.com/sstratoti/actionable-notifications-subflow-for-ios/wiki/Debugging-and-Troubleshooting), and paste your debug output here.
+Please follow the steps outlined in the wiki:
+https://github.com/sstratoti/actionable-notifications-subflow-for-ios/wiki/Debugging-and-Troubleshooting
+Paste your debug output here.
 
 **Version Information (please complete the following):**
  - iOS: [e.g. 16.4.1]
