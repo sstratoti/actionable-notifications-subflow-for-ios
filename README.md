@@ -1,4 +1,4 @@
-# IMPORTANT: REQUIRED MINIMUM VERSION IS NOW node-red-contrib-home-assistant-websocket v0.66.0 [LINK](https://github.com/zachowj/node-red-contrib-home-assistant-websocket/releases/tag/v0.66.0)
+# IMPORTANT: REQUIRED MINIMUM VERSION IS NOW [node-red-contrib-home-assistant-websocket v0.66.0](https://github.com/zachowj/node-red-contrib-home-assistant-websocket/releases/tag/v0.66.0)
 
 # Actionable Notifications Subflow for iOS
 Actionable Notifications Node-Red Subflow for Home Assistant Companion - iOS
