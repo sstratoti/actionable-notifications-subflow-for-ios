@@ -1,3 +1,5 @@
+# IMPORTANT: REQUIRED MINIMUM VERSION IS NOW HOME ASSISTANT 2024.8
+
 # Actionable Notifications Subflow for iOS
 Actionable Notifications Node-Red Subflow for Home Assistant Companion - iOS
 
