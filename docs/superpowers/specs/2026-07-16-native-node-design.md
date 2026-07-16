@@ -235,3 +235,94 @@ server is reachable at editor-open time.
 - Auto-migration tooling that rewrites `flows.json` subflow instances automatically.
 - Standalone HA connection (depends on `node-red-contrib-home-assistant-websocket`
   instead).
+
+---
+
+# Revision 2 (2026-07-16) — Companion-docs review + design review
+
+Two reviews followed the initial spec: (1) a full pass over the current HA iOS
+Companion App notification docs (companion.home-assistant.io), and (2) a critical
+design/logic review by Fable 5. This section amends the decisions above; where it
+conflicts with Revision 1, Revision 2 wins.
+
+## Companion-docs findings and decisions (approved by Steve)
+
+**Sound list — CONFIRMED bundled; hedge withdrawn.** The ~140
+Morgan-Freeman/Alexa/Daisy `.wav` sounds are genuinely bundled in the Companion App,
+not personal uploads. Keep the bundled-sound dropdown + free-text override. Custom
+sounds must be 32-bit float 48000 Hz `.wav`; users can additionally import ~400 iOS
+system `.caf` sounds — so the free-text override is load-bearing, not a nicety. The
+"verify the list against current docs" task stays; the earlier "these might be
+personal files" concern is withdrawn.
+
+**Action-tap event — modernize to dual-listen (CHANGES the integration + routing).**
+v2 listens only on `ios.notification_action_fired`, the legacy/deprecated event. The
+current unified event is `mobile_app_notification_action`. Decision: **subscribe to
+BOTH and normalize.** The action identifier field differs — legacy
+`event.actionName`, modern `event.action` — normalize to a single internal `actionId`.
+`action_data` (tag / deviceName / allServices, used for ownership matching and
+auto-clear) is present on both. The action listener registers two event types in the
+HA client's `eventsList`, and one handler normalizes either shape.
+
+**New iOS features added to v1 scope:**
+- **Badge:** `data.push.badge` (integer) config field, plus a `clear_badge` input
+  command (analogous to `msg.clear`, e.g. `msg.clearBadge = true`).
+- **presentation_options:** `data.presentation_options` array (editor checkboxes:
+  alert / badge / sound) controlling foreground display.
+- **Media key-placement fix:** emit the documented
+  `data.attachment.{url, content-type, lazy, hide-thumbnail}` structure. v2's
+  top-level `data.contentUrl` and `data.lazy` are corrected to `data.attachment.url`
+  and `data.attachment.lazy`; `content-type` is newly exposed. This is a deliberate
+  behavior change from v2 (justified by "production ready" + matching current docs) —
+  requires a migration note. The exact current structure will be re-verified against
+  the attachments doc during implementation before finalizing.
+
+**Live Activities / Live Updates — IN v1 scope (new capability + new editor section).**
+iOS 17.2+, HA Core 2026.7+, currently Labs/TestFlight. Mechanically a standard notify
+call: `data.data.live_update: true` + required `tag`, plus optional `progress`,
+`progress_max`, `chronometer`, `when`, `when_relative`, `notification_icon`,
+`notification_icon_color`, `color`, `background_color`, `text_color`, `url`. Updating
+= re-send the same tag; ending = `clear_notification` with the same tag (already
+supported by the node's clear path). Design: a "Live Activity" section on the node;
+when enabled, the payload builder emits the live-update field set. iOS throttles
+updates (avoid sub-second) — documented, not enforced by the node. Kept as a separate
+payload-builder path so it doesn't entangle the standard-notification builder.
+
+## Design-review findings folded into the plan revision
+
+Confirmed against the extracted v2 source; fixed in the revised plan (implementation
+detail, recorded here so the design of record acknowledges them):
+
+1. **Override null-semantics:** the payload builder must use nullish (`??`) precedence
+   for title/subtitle/message/url/cameraEntity/interruptionLevel/group/tag and all
+   map/media fields (so an explicit `""` override is honored, matching v2), and `||`
+   only for the sound chain. Rev-1's `pick()` (which treats `""` as absent for
+   everything) is wrong — split into `pick` (|| semantics) and `pickNullish` (??).
+2. **Action override = full replace, not merge:** an override supplies the whole action
+   object for that id (matching v2), not a shallow field merge.
+3. **Auto-clear must purge tracking state:** on clear-on-action, remove the matching
+   `sentMessages` entries (v2 calls `cleanUpMessages` for every device) — otherwise a
+   duplicate/late action event re-fires routing and a second auto-clear.
+4. **Send-path persistence:** persist `sentMessages` incrementally (or in `finally`) so
+   a mid-fan-out failure doesn't silently drop already-sent devices from tracking.
+5. **Rate-limit fidelity + default:** v2 always throttles multi-device fan-out (~5s) on
+   BOTH send and clear paths, and additionally applies a one-shot ~10s+jitter
+   sequencing delay before routing an action when clear-on-action is set. The
+   `staggerMs` option must default to v2's throttle rather than 0/off, and the
+   sequencing delay must be reproduced (or consciously dropped, with a migration note).
+6. **Two-instance isolation test (required):** the suite MUST instantiate two node
+   instances in one flow and verify their `node.context()` tracking doesn't collide —
+   the property that motivated the whole rewrite. Rev-1 never tested it.
+7. **Async test determinism:** integration tests must await the input handler's
+   completion (via the `done` callback / a returned promise) instead of `setTimeout`
+   races, and avoid millisecond-precision timing assertions.
+
+Minor: the Rev-1 `fetchUsers` note "verify live whether send() returns a bare array or
+{result}" is resolved — `home-assistant-js-websocket`'s `sendMessagePromise` resolves
+`message.result`, so `send()` returns the bare array. The defensive `{result}` branch
+is dead code and can be dropped.
+
+## Open decision resolved (2026-07-16)
+
+**Tap-to-perform action entity/service picker:** Steve to confirm implement-in-v1 vs
+defer. (Captured in the follow-up question after this revision.)
