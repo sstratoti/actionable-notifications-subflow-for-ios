@@ -2,9 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Convert the `iOS Actionable Notification v2` Node-RED subflow into a publishable native node package, `node-red-contrib-ha-ios-notification`, with HA entity/service pickers, dynamic actionable-button outputs, per-instance state, a Mocha + node-red-node-test-helper test suite, docs, and a publish-ready package.
+> **PLAN REVISION 2 (2026-07-16):** This plan was revised after a full HA Companion App
+> notification-docs review and a design/logic review (see spec Revision 2). Changes to
+> the original 28 tasks are marked **[REV2]** inline in the affected tasks; brand-new
+> work is in Tasks 29–34 and the decimal-inserted tasks (8.5, 15.5). Read the whole task
+> you are on — REV2 notes replace, not merely append to, the surrounding steps they touch.
 
-**Architecture:** A single self-contained Node-RED node (one input handling both send and manual-clear; dynamic outputs for received actions) built from small pure `lib/` modules (payload building, clear-payload building, action-list normalization, tag sanitization, message-store) wired together by the node runtime file. HA connectivity goes through `node-red-contrib-home-assistant-websocket`'s internal `getHomeAssistant()`/`HomeAssistant` client (verified against the installed v0.80.3 source — see Task 11), not a standalone HA client.
+**Goal:** Convert the `iOS Actionable Notification v2` Node-RED subflow into a publishable native node package, `node-red-contrib-ha-ios-notification`, with HA entity/service pickers, dynamic actionable-button outputs, per-instance state, modern + legacy action-event support, badge / presentation-options / Live Activities coverage, tap-to-perform action targets, a Mocha + node-red-node-test-helper test suite, docs, and a publish-ready package.
+
+**Architecture:** A single self-contained Node-RED node (one input handling send, manual-clear, and clear-badge; dynamic outputs for received actions) built from small pure `lib/` modules (payload building, live-activity payload building, clear-payload building, action-list normalization, tag sanitization, message-store) wired together by the node runtime file. HA connectivity goes through `node-red-contrib-home-assistant-websocket`'s internal `getHomeAssistant()`/`HomeAssistant` client (verified against the installed v0.80.3 source — see Task 11), not a standalone HA client.
 
 **Tech Stack:** Node.js (CommonJS), Mocha + should, node-red-node-test-helper, proxyquire, ESLint, GitHub Actions.
 
@@ -12,13 +18,14 @@
 
 - Package name: `node-red-contrib-ha-ios-notification`. Node type (palette name): `ha-ios-notification`, label "HA iOS Notification".
 - Depends on `node-red-contrib-home-assistant-websocket` as a `peerDependency` (range `>=0.70.0`, matching the installed `0.80.3` and the API surface verified in Task 11) — never bundled as a regular `dependency`.
-- `msg.notificationOverride` 3-tier precedence (`serviceOverride` > global `override` > node config default) is preserved exactly, per the design spec's override-compatibility section. Tag never accepts a service-level override (matches v2).
-- All dedup/tracking state lives in `node.context()`, keyed by this node instance only — never `flow.*` or `global.*`.
-- iOS-only for v1 (`ios.notification_action_fired` event only).
+- `msg.notificationOverride` 3-tier precedence (`serviceOverride` > global `override` > node config default) is preserved exactly, per the design spec's override-compatibility section. Tag never accepts a service-level override (matches v2). **[REV2]** Precedence uses **nullish** semantics (`??`) for every field except the sound chain (which uses `||`, matching v2) — an explicit empty-string override IS honored and must NOT fall through to a lower tier. See Task 5.
+- **[REV2]** An action override supplies the WHOLE action object for its id — full replace, not field-merge (matches v2). See Tasks 3 and 6.
+- All dedup/tracking state lives in `node.context()`, keyed by this node instance only — never `flow.*` or `global.*`. **[REV2]** Two node instances in one flow must never collide — verified by a required test in Task 33.
+- **[REV2]** iOS-only for v1, but the action listener subscribes to BOTH `mobile_app_notification_action` (current) and `ios.notification_action_fired` (legacy/deprecated), normalizing the action-id field (`action` vs `actionName`) to an internal `actionId`. See Tasks 11 and 15.
 - Node engines: `"node": ">=18"`.
-- Test runner: Mocha + should for unit tests; `node-red-node-test-helper` + `proxyquire` for integration tests. No live HA connection in any test.
+- Test runner: Mocha + should for unit tests; `node-red-node-test-helper` + `proxyquire` for integration tests. No live HA connection in any test. **[REV2]** Integration tests await the input handler via its `done` callback / a returned promise — no `setTimeout`-race assertions, no millisecond-precision timing assertions. See Task 34.
 - Repo: `sstratoti/actionable-notifications-subflow-for-ios`, restructured in place. Local clone: `/home/steve/Documents/GitHub/actionable-notifications-subflow-for-ios`. All commands below assume this as the working directory unless stated otherwise.
-- Design spec of record: `docs/superpowers/specs/2026-07-16-native-node-design.md` (already committed).
+- Design spec of record: `docs/superpowers/specs/2026-07-16-native-node-design.md` (already committed, includes Revision 2).
 
 ---
 
@@ -270,7 +277,15 @@ git commit -m "feat: add tag sanitization module"
 
 ---
 
-## Task 3: `lib/action-list.js` — action normalization and override merging
+## Task 3: `lib/action-list.js` — action normalization and override (full-replace)
+
+**[REV2] Two changes from the original task:** (1) `applyActionOverrides` does a
+**full replace** of the action's props from the override (not a shallow field-merge) —
+matching v2, so a config-only prop like `destructive: true` disappears when an
+override for that id omits it. (2) Actions carry **tap-to-perform target props**
+(`targetService`, `targetEntityId`, `targetData`) alongside the iOS payload props;
+these are node-side only and must NEVER be emitted into the iOS action payload (Task 6
+emits only `IOS_ACTION_PROPS`).
 
 **Files:**
 - Create: `lib/action-list.js`
@@ -278,7 +293,7 @@ git commit -m "feat: add tag sanitization module"
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `normalizeActions(rawActions): Array<{id, title, outputIndex, ...optionalProps}>`, `applyActionOverrides(normalizedActions, overridesById): Array<...>` — consumed by Task 6 (`lib/build-payload.js`) and Task 12 (node runtime, for output count).
+- Produces: `normalizeActions(rawActions): Array<{id, title, outputIndex, ...props}>`, `applyActionOverrides(normalizedActions, overridesById): Array<...>`, `IOS_ACTION_PROPS: string[]` (the 8 props emitted to iOS), `TAP_TARGET_PROPS: string[]` (node-side tap-to-perform props) — consumed by Task 6 (`lib/build-payload.js`, emits `IOS_ACTION_PROPS` only) and Tasks 12/15/15.5 (node runtime — output count, and tap-to-perform via `TAP_TARGET_PROPS`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -338,6 +353,19 @@ describe('action-list', () => {
       const result = normalizeActions([raw]);
       result[0].should.match(raw);
     });
+
+    it('carries through tap-to-perform target props', () => {
+      const raw = {
+        title: 'Unlock',
+        targetService: 'lock.unlock',
+        targetEntityId: 'lock.front_door',
+        targetData: { code: '1234' },
+      };
+      const result = normalizeActions([raw]);
+      result[0].targetService.should.equal('lock.unlock');
+      result[0].targetEntityId.should.equal('lock.front_door');
+      result[0].targetData.should.eql({ code: '1234' });
+    });
   });
 
   describe('applyActionOverrides', () => {
@@ -352,6 +380,21 @@ describe('action-list', () => {
       result[0].id.should.equal('1');
       result[0].outputIndex.should.equal(0);
       result[0].title.should.equal('A overridden');
+      result[0].uri.should.equal('/new');
+    });
+
+    it('FULLY replaces the action: a config prop absent from the override is dropped', () => {
+      const actions = normalizeActions([{ title: 'A', destructive: true, uri: '/old' }]);
+      const result = applyActionOverrides(actions, { 1: { title: 'A', uri: '/new' } });
+      result[0].should.not.have.property('destructive'); // full replace, not merge
+      result[0].uri.should.equal('/new');
+    });
+
+    it('retains the original title when the override omits one (avoids dropping the slot)', () => {
+      const actions = normalizeActions([{ title: 'Original', destructive: true }]);
+      const result = applyActionOverrides(actions, { 1: { uri: '/new' } });
+      result[0].title.should.equal('Original');
+      result[0].should.not.have.property('destructive');
       result[0].uri.should.equal('/new');
     });
 
@@ -375,7 +418,8 @@ Expected: FAIL — `Cannot find module '../../lib/action-list'`
 // lib/action-list.js
 'use strict';
 
-const OPTIONAL_ACTION_PROPS = [
+// Props emitted into the iOS notification action payload (data.data.actions[]).
+const IOS_ACTION_PROPS = [
   'activationMode',
   'uri',
   'textInputButtonTitle',
@@ -385,6 +429,11 @@ const OPTIONAL_ACTION_PROPS = [
   'behavior',
   'icon',
 ];
+
+// Node-side-only props for the tap-to-perform feature — NEVER emitted to iOS.
+const TAP_TARGET_PROPS = ['targetService', 'targetEntityId', 'targetData'];
+
+const ALL_ACTION_PROPS = [...IOS_ACTION_PROPS, ...TAP_TARGET_PROPS];
 
 function normalizeActions(rawActions) {
   if (!Array.isArray(rawActions)) return [];
@@ -400,7 +449,7 @@ function normalizeActions(rawActions) {
 
       const normalized = { id, title: action.title, outputIndex: index };
 
-      OPTIONAL_ACTION_PROPS.forEach((prop) => {
+      ALL_ACTION_PROPS.forEach((prop) => {
         if (action[prop] !== undefined) {
           normalized[prop] = action[prop];
         }
@@ -411,23 +460,38 @@ function normalizeActions(rawActions) {
     .filter(Boolean);
 }
 
+// Full-replace semantics (matches v2): the override supplies the WHOLE action content
+// for its id. Props absent from the override are dropped, not merged from the base.
+// id and outputIndex stay stable; title falls back to the base only if the override
+// omits it, so a slot is never dropped mid-list (which would shift dynamic outputs).
 function applyActionOverrides(normalizedActions, overridesById) {
   if (!overridesById || typeof overridesById !== 'object') return normalizedActions;
 
   return normalizedActions.map((action) => {
     const override = overridesById[action.id];
     if (!override || typeof override !== 'object') return action;
-    return { ...action, ...override, id: action.id, outputIndex: action.outputIndex };
+
+    const replaced = {
+      id: action.id,
+      outputIndex: action.outputIndex,
+      title: override.title !== undefined && override.title !== null && override.title !== ''
+        ? override.title
+        : action.title,
+    };
+    ALL_ACTION_PROPS.forEach((prop) => {
+      if (override[prop] !== undefined) replaced[prop] = override[prop];
+    });
+    return replaced;
   });
 }
 
-module.exports = { normalizeActions, applyActionOverrides, OPTIONAL_ACTION_PROPS };
+module.exports = { normalizeActions, applyActionOverrides, IOS_ACTION_PROPS, TAP_TARGET_PROPS };
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/unit/action-list.spec.js`
-Expected: PASS — 10 passing
+Expected: PASS — 13 passing
 
 - [ ] **Step 5: Commit**
 
@@ -667,6 +731,21 @@ describe('build-payload: base fields and fan-out', () => {
     payloads[0].payload.data.title.should.equal('Service Title');
   });
 
+  it('[REV2] honors an explicit empty-string override, suppressing the configured default (nullish precedence, not ||)', () => {
+    // config has a subtitle; a global override explicitly clears it with ''.
+    const config = baseConfig({ subtitle: 'Configured Subtitle' });
+    const override = { notificationBase: { subtitle: '' } };
+    const { payloads } = buildNotificationPayloads(config, override);
+    // '' is an explicit clear -> the subtitle key is omitted, NOT fallen-through to config.
+    payloads[0].payload.data.data.should.not.have.property('subtitle');
+  });
+
+  it('[REV2] falls through to the config default only when the override is undefined (not empty)', () => {
+    const config = baseConfig({ subtitle: 'Configured Subtitle' });
+    const { payloads } = buildNotificationPayloads(config, { notificationBase: {} });
+    payloads[0].payload.data.data.subtitle.should.equal('Configured Subtitle');
+  });
+
   it('a msg-level services override fully replaces the configured target list', () => {
     const config = baseConfig({ services: [{ deviceName: 'my_iphone' }] });
     const override = { services: [{ deviceName: 'everyone' }] };
@@ -727,9 +806,20 @@ Expected: FAIL — `Cannot find module '../../lib/build-payload'`
 
 const { sanitizeTag } = require('./sanitize-tag');
 
+// [REV2] || semantics — treats '' as absent. Used ONLY for the sound chain (matches v2).
 function pick(...values) {
   for (const v of values) {
     if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return undefined;
+}
+
+// [REV2] Nullish (??) semantics — honors an explicit '' (only undefined/null are "absent").
+// Used for every other override chain, so an explicit empty-string override suppresses a
+// configured default rather than falling through to it (matches v2's `??` chains).
+function pickNullish(...values) {
+  for (const v of values) {
+    if (v !== undefined && v !== null) return v;
   }
   return undefined;
 }
@@ -752,22 +842,23 @@ function buildNotificationPayloads(config, override) {
     return { error: 'no services defined', payloads: [] };
   }
 
-  const tag = sanitizeTag(pick(safeOverride.tag, config.tag), config.title);
+  const tag = sanitizeTag(pickNullish(safeOverride.tag, config.tag), config.title);
 
   const payloads = services.map((service) => {
     const serviceOverride = service.serviceOverride || {};
     const nb = serviceOverride.notificationBase || {};
     const ovNb = safeOverride.notificationBase || {};
 
-    const title = pick(nb.title, ovNb.title, config.title) || '';
-    const subtitle = pick(nb.subtitle, ovNb.subtitle, config.subtitle) || '';
-    const message = pick(nb.message, ovNb.message, config.message) || '';
-    const url = pick(nb.url, ovNb.url, config.notificationUrl);
-    const cameraEntity = pick(nb.cameraEntity, ovNb.cameraEntity, config.cameraEntity);
-    const interruptionLevel = pick(nb.interruptionLevel, ovNb.interruptionLevel, config.interruptionLevel) || 'active';
+    const title = pickNullish(nb.title, ovNb.title, config.title) || '';
+    const subtitle = pickNullish(nb.subtitle, ovNb.subtitle, config.subtitle) || '';
+    const message = pickNullish(nb.message, ovNb.message, config.message) || '';
+    const url = pickNullish(nb.url, ovNb.url, config.notificationUrl);
+    const cameraEntity = pickNullish(nb.cameraEntity, ovNb.cameraEntity, config.cameraEntity);
+    const interruptionLevel = pickNullish(nb.interruptionLevel, ovNb.interruptionLevel, config.interruptionLevel) || 'active';
+    // sound uses || (pick) — matches v2's `||` sound chain
     const customSound =
       pick(nb.customSound, ovNb.customSound, config.customSound, config.customSoundPreInstalled) || 'default';
-    const group = pick(nb.group, ovNb.group, config.group);
+    const group = pickNullish(nb.group, ovNb.group, config.group);
 
     const data = {
       tag,
@@ -795,13 +886,13 @@ function buildNotificationPayloads(config, override) {
   return { error: null, payloads };
 }
 
-module.exports = { buildNotificationPayloads, pick, firstDefined };
+module.exports = { buildNotificationPayloads, pick, pickNullish, firstDefined };
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/unit/build-payload.spec.js`
-Expected: PASS — 12 passing
+Expected: PASS — 14 passing
 
 - [ ] **Step 5: Commit**
 
@@ -902,6 +993,17 @@ describe('build-payload: actions', () => {
     const { payloads } = buildNotificationPayloads(config, override);
     payloads[0].payload.data.data.actions[0].title.should.equal('Service Wins');
   });
+
+  it('[REV2] does NOT emit tap-to-perform target props into the iOS action payload', () => {
+    const config = baseConfig({
+      actions: [{ title: 'Unlock', targetService: 'lock.unlock', targetEntityId: 'lock.front_door' }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const action = payloads[0].payload.data.data.actions[0];
+    action.title.should.equal('Unlock');
+    action.should.not.have.property('targetService');
+    action.should.not.have.property('targetEntityId');
+  });
 });
 ```
 
@@ -917,11 +1019,20 @@ Expected: FAIL — the new assertions fail because `actions`/`action_data` are n
 'use strict';
 
 const { sanitizeTag } = require('./sanitize-tag');
-const { normalizeActions, applyActionOverrides } = require('./action-list');
+const { normalizeActions, applyActionOverrides, IOS_ACTION_PROPS } = require('./action-list');
 
+// [REV2] || semantics — '' is absent. Sound chain only (matches v2).
 function pick(...values) {
   for (const v of values) {
     if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return undefined;
+}
+
+// [REV2] Nullish semantics — honors explicit ''. Used for every other override chain.
+function pickNullish(...values) {
+  for (const v of values) {
+    if (v !== undefined && v !== null) return v;
   }
   return undefined;
 }
@@ -932,17 +1043,6 @@ function firstDefined(...values) {
   }
   return undefined;
 }
-
-const ACTION_OUTPUT_PROPS = [
-  'activationMode',
-  'uri',
-  'textInputButtonTitle',
-  'textInputPlaceholder',
-  'authenticationRequired',
-  'destructive',
-  'behavior',
-  'icon',
-];
 
 function buildNotificationPayloads(config, override) {
   const safeOverride = override || {};
@@ -955,7 +1055,7 @@ function buildNotificationPayloads(config, override) {
     return { error: 'no services defined', payloads: [] };
   }
 
-  const tag = sanitizeTag(pick(safeOverride.tag, config.tag), config.title);
+  const tag = sanitizeTag(pickNullish(safeOverride.tag, config.tag), config.title);
   const baseActions = normalizeActions(config.actions);
 
   const payloads = services.map((service) => {
@@ -963,15 +1063,15 @@ function buildNotificationPayloads(config, override) {
     const nb = serviceOverride.notificationBase || {};
     const ovNb = safeOverride.notificationBase || {};
 
-    const title = pick(nb.title, ovNb.title, config.title) || '';
-    const subtitle = pick(nb.subtitle, ovNb.subtitle, config.subtitle) || '';
-    const message = pick(nb.message, ovNb.message, config.message) || '';
-    const url = pick(nb.url, ovNb.url, config.notificationUrl);
-    const cameraEntity = pick(nb.cameraEntity, ovNb.cameraEntity, config.cameraEntity);
-    const interruptionLevel = pick(nb.interruptionLevel, ovNb.interruptionLevel, config.interruptionLevel) || 'active';
+    const title = pickNullish(nb.title, ovNb.title, config.title) || '';
+    const subtitle = pickNullish(nb.subtitle, ovNb.subtitle, config.subtitle) || '';
+    const message = pickNullish(nb.message, ovNb.message, config.message) || '';
+    const url = pickNullish(nb.url, ovNb.url, config.notificationUrl);
+    const cameraEntity = pickNullish(nb.cameraEntity, ovNb.cameraEntity, config.cameraEntity);
+    const interruptionLevel = pickNullish(nb.interruptionLevel, ovNb.interruptionLevel, config.interruptionLevel) || 'active';
     const customSound =
       pick(nb.customSound, ovNb.customSound, config.customSound, config.customSoundPreInstalled) || 'default';
-    const group = pick(nb.group, ovNb.group, config.group);
+    const group = pickNullish(nb.group, ovNb.group, config.group);
     const populateUserInfo = firstDefined(
       nb.populateUserInformation,
       ovNb.populateUserInformation,
@@ -989,9 +1089,11 @@ function buildNotificationPayloads(config, override) {
       ...(safeOverride.actions || {}),
       ...(serviceOverride.actions || {}),
     };
+    // Emit only IOS_ACTION_PROPS into the payload — tap-to-perform target props
+    // (targetService/targetEntityId/targetData) stay node-side and are never sent to iOS.
     const finalActions = applyActionOverrides(baseActions, actionOverridesById).map((a) => {
       const actionObj = { action: a.id, title: a.title };
-      ACTION_OUTPUT_PROPS.forEach((prop) => {
+      IOS_ACTION_PROPS.forEach((prop) => {
         if (a[prop] !== undefined) actionObj[prop] = a[prop];
       });
       actionObj.service = service;
@@ -1037,13 +1139,13 @@ function buildNotificationPayloads(config, override) {
   return { error: null, payloads };
 }
 
-module.exports = { buildNotificationPayloads, pick, firstDefined };
+module.exports = { buildNotificationPayloads, pick, pickNullish, firstDefined };
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/unit/build-payload.spec.js`
-Expected: PASS — 19 passing
+Expected: PASS — 22 passing
 
 - [ ] **Step 5: Commit**
 
@@ -1131,10 +1233,11 @@ In `lib/build-payload.js`, inside the `services.map((service) => { ... })` callb
 
     const mp = serviceOverride.map || {};
     const ovMp = safeOverride.map || {};
-    const firstLatitude = pick(mp.firstLatitude, ovMp.firstLatitude, config.firstLatitude);
-    const firstLongitude = pick(mp.firstLongitude, ovMp.firstLongitude, config.firstLongitude);
-    const secondLatitude = pick(mp.secondLatitude, ovMp.secondLatitude, config.secondLatitude);
-    const secondLongitude = pick(mp.secondLongitude, ovMp.secondLongitude, config.secondLongitude);
+    // [REV2] pickNullish for map value fields (nullish precedence per spec Rev 2)
+    const firstLatitude = pickNullish(mp.firstLatitude, ovMp.firstLatitude, config.firstLatitude);
+    const firstLongitude = pickNullish(mp.firstLongitude, ovMp.firstLongitude, config.firstLongitude);
+    const secondLatitude = pickNullish(mp.secondLatitude, ovMp.secondLatitude, config.secondLatitude);
+    const secondLongitude = pickNullish(mp.secondLongitude, ovMp.secondLongitude, config.secondLongitude);
     const showLineBetweenPoints = firstDefined(mp.showLineBetweenPoints, ovMp.showLineBetweenPoints, config.showLineBetweenPoints, false);
     const showCompass = firstDefined(mp.showCompass, ovMp.showCompass, config.showCompass, false);
     const showPointsOfInterest = firstDefined(mp.showPointsOfInterest, ovMp.showPointsOfInterest, config.showPointsOfInterest, false);
@@ -1170,7 +1273,7 @@ Then, immediately after the `data` object is constructed (after `const data = {.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/unit/build-payload.spec.js`
-Expected: PASS — 24 passing
+Expected: PASS — 27 passing
 
 - [ ] **Step 5: Commit**
 
@@ -1181,7 +1284,16 @@ git commit -m "feat: add map fields to notification payload builder"
 
 ---
 
-## Task 8: `lib/build-payload.js` — media fields
+## Task 8: `lib/build-payload.js` — media fields (attachment-structured)
+
+**[REV2] Corrected key placement.** Per the current HA attachments doc, `image`/
+`video`/`audio` sit directly under the inner data block (`data.data.image`, etc.), but
+the override URL, content-type, lazy flag, and hide-thumbnail flag all live under a
+single `data.data.attachment` object: `attachment.{url, content-type, lazy,
+hide-thumbnail}`. v2 wrongly emitted top-level `data.data.contentUrl` and
+`data.data.lazy`; this task emits the documented structure instead. A new
+`contentType` config field maps to `attachment.content-type`. (Migration note lives in
+Task 26.)
 
 **Files:**
 - Modify: `lib/build-payload.js`
@@ -1189,7 +1301,10 @@ git commit -m "feat: add map fields to notification payload builder"
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: `payload.data.data.{contentUrl,image,video,audio,lazy,attachment}` when any media field is present. This completes `lib/build-payload.js` — no further tasks modify this file.
+- Produces: `payload.data.data.{image,video,audio}` directly, and
+  `payload.data.data.attachment.{url, content-type, lazy, hide-thumbnail}` when any of
+  those are set. Task 8.5 adds badge + presentation_options to the same file; Live
+  Activities gets its own separate builder in Task 31.
 
 - [ ] **Step 1: Append the failing tests**
 
@@ -1203,36 +1318,50 @@ describe('build-payload: media', () => {
     d.should.not.have.property('image');
     d.should.not.have.property('video');
     d.should.not.have.property('audio');
-    d.should.not.have.property('contentUrl');
+    d.should.not.have.property('attachment');
   });
 
-  it('adds the image path when set', () => {
+  it('adds the image path directly under data', () => {
     const config = baseConfig({ imagePath: '/local/camera.jpg' });
     const { payloads } = buildNotificationPayloads(config, {});
     payloads[0].payload.data.data.image.should.equal('/local/camera.jpg');
   });
 
-  it('adds contentUrl, video, and audio when set', () => {
-    const config = baseConfig({ contentUrl: 'https://x/y.mp4', videoPath: '/v.mp4', audioPath: '/a.mp3' });
+  it('adds video and audio directly under data', () => {
+    const config = baseConfig({ videoPath: '/v.mp4', audioPath: '/a.mp3' });
     const { payloads } = buildNotificationPayloads(config, {});
     const d = payloads[0].payload.data.data;
-    d.contentUrl.should.equal('https://x/y.mp4');
     d.video.should.equal('/v.mp4');
     d.audio.should.equal('/a.mp3');
   });
 
-  it('sets lazy and attachment.hide-thumbnail from lazyLoading/hideThumbnail', () => {
+  it('[REV2] puts the override URL under attachment.url (not top-level contentUrl)', () => {
+    const config = baseConfig({ contentUrl: 'https://x/y.mp4' });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const d = payloads[0].payload.data.data;
+    d.should.not.have.property('contentUrl');
+    d.attachment.url.should.equal('https://x/y.mp4');
+  });
+
+  it('[REV2] puts content-type under attachment', () => {
+    const config = baseConfig({ imagePath: '/x', contentType: 'jpeg' });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.attachment['content-type'].should.equal('jpeg');
+  });
+
+  it('[REV2] puts lazy and hide-thumbnail under attachment (not top-level lazy)', () => {
     const config = baseConfig({ imagePath: '/x.jpg', lazyLoading: true, hideThumbnail: true });
     const { payloads } = buildNotificationPayloads(config, {});
     const d = payloads[0].payload.data.data;
-    d.lazy.should.equal(true);
-    d.attachment.should.eql({ 'hide-thumbnail': true });
+    d.should.not.have.property('lazy');
+    d.attachment.lazy.should.equal(true);
+    d.attachment['hide-thumbnail'].should.equal(true);
   });
 
-  it('omits attachment when hideThumbnail is false', () => {
-    const config = baseConfig({ imagePath: '/x.jpg', hideThumbnail: false });
+  it('omits the attachment object entirely when no attachment sub-field is set', () => {
+    const config = baseConfig({ imagePath: '/x.jpg', hideThumbnail: false, lazyLoading: false });
     const { payloads } = buildNotificationPayloads(config, {});
-    payloads[0].payload.data.data.attachment.should.equal(undefined);
+    payloads[0].payload.data.data.should.not.have.property('attachment');
   });
 });
 ```
@@ -1249,39 +1378,158 @@ In `lib/build-payload.js`, inside the map callback, add media-field extraction a
 ```js
     const md = serviceOverride.media || {};
     const ovMd = safeOverride.media || {};
-    const contentUrl = pick(md.contentUrl, ovMd.contentUrl, config.contentUrl);
-    const imagePath = pick(md.imagePath, ovMd.imagePath, config.imagePath);
-    const videoPath = pick(md.videoPath, ovMd.videoPath, config.videoPath);
-    const audioPath = pick(md.audioPath, ovMd.audioPath, config.audioPath);
+    // [REV2] pickNullish so an explicit '' override clears a configured media field
+    const contentUrl = pickNullish(md.contentUrl, ovMd.contentUrl, config.contentUrl);
+    const contentType = pickNullish(md.contentType, ovMd.contentType, config.contentType);
+    const imagePath = pickNullish(md.imagePath, ovMd.imagePath, config.imagePath);
+    const videoPath = pickNullish(md.videoPath, ovMd.videoPath, config.videoPath);
+    const audioPath = pickNullish(md.audioPath, ovMd.audioPath, config.audioPath);
     const lazyLoading = firstDefined(md.lazyLoading, ovMd.lazyLoading, config.lazyLoading, false);
     const hideThumbnail = firstDefined(md.hideThumbnail, ovMd.hideThumbnail, config.hideThumbnail, false);
 ```
 
-Then, after the map-fields `if (firstLatitude && firstLongitude) { ... }` block (from Task 7), add:
+Then, after the map-fields `if (firstLatitude && firstLongitude) { ... }` block (from
+Task 7), add. **[REV2]** `image`/`video`/`audio` go directly under `data`; `url`,
+`content-type`, `lazy`, and `hide-thumbnail` all go under a single `attachment` object,
+matching the current HA attachments doc:
 
 ```js
-    if (contentUrl || imagePath || videoPath || audioPath) {
-      Object.assign(data, {
-        contentUrl: contentUrl || undefined,
-        image: imagePath || undefined,
-        video: videoPath || undefined,
-        audio: audioPath || undefined,
-        lazy: lazyLoading || undefined,
-        attachment: hideThumbnail ? { 'hide-thumbnail': hideThumbnail } : undefined,
-      });
-    }
+    // image/video/audio: directly under the inner data block
+    if (imagePath) data.image = imagePath;
+    if (videoPath) data.video = videoPath;
+    if (audioPath) data.audio = audioPath;
+
+    // attachment object: url / content-type / lazy / hide-thumbnail
+    const attachment = {};
+    if (contentUrl) attachment.url = contentUrl;
+    if (contentType) attachment['content-type'] = contentType;
+    if (lazyLoading) attachment.lazy = lazyLoading;
+    if (hideThumbnail) attachment['hide-thumbnail'] = hideThumbnail;
+    if (Object.keys(attachment).length > 0) data.attachment = attachment;
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/unit/build-payload.spec.js`
-Expected: PASS — 29 passing
+Expected: PASS — 34 passing
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add lib/build-payload.js test/unit/build-payload.spec.js
 git commit -m "feat: add media fields to notification payload builder"
+```
+
+---
+
+## Task 8.5: `lib/build-payload.js` — badge and presentation_options [REV2 — NEW]
+
+**[REV2] New v1 feature.** Adds two iOS notification fields: `data.push.badge` (integer
+app-icon badge count) and `data.presentation_options` (array controlling foreground
+display — any of `"alert"`, `"badge"`, `"sound"`). Both are standard notification
+fields, so they extend `lib/build-payload.js`.
+
+**Files:**
+- Modify: `lib/build-payload.js`
+- Modify: `test/unit/build-payload.spec.js`
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: `payload.data.data.push.badge` (integer) and
+  `payload.data.data.presentation_options` (array) when set. `badge` follows the same
+  3-tier override chain (`notificationBase.badge`); `presentation_options` too.
+
+- [ ] **Step 1: Append the failing tests**
+
+```js
+// append to test/unit/build-payload.spec.js
+
+describe('build-payload: badge and presentation_options', () => {
+  it('adds no badge or presentation_options when unset', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {});
+    payloads[0].payload.data.data.push.should.not.have.property('badge');
+    payloads[0].payload.data.data.should.not.have.property('presentation_options');
+  });
+
+  it('sets push.badge from config (integer)', () => {
+    const config = baseConfig({ badge: 5 });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.push.badge.should.equal(5);
+  });
+
+  it('honors an explicit badge of 0 (clear-badge count) via nullish precedence', () => {
+    const config = baseConfig({ badge: 3 });
+    const override = { notificationBase: { badge: 0 } };
+    const { payloads } = buildNotificationPayloads(config, override);
+    payloads[0].payload.data.data.push.badge.should.equal(0);
+  });
+
+  it('sets presentation_options array when configured', () => {
+    const config = baseConfig({ presentationOptions: ['alert', 'sound'] });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.presentation_options.should.eql(['alert', 'sound']);
+  });
+
+  it('a per-service override replaces presentation_options', () => {
+    const config = baseConfig({
+      presentationOptions: ['alert'],
+      services: [{ deviceName: 'a', serviceOverride: { notificationBase: { presentationOptions: ['badge'] } } }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.presentation_options.should.eql(['badge']);
+  });
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `npx mocha test/unit/build-payload.spec.js`
+Expected: FAIL — `badge`/`presentation_options` are never set.
+
+- [ ] **Step 3: Extend the implementation**
+
+In `lib/build-payload.js`, inside the map callback, compute the two values alongside the
+other base fields (badge uses nullish precedence so an explicit `0` is honored;
+`presentation_options` uses `firstDefined` so an explicit `[]` is honored):
+
+```js
+    const badge = pickNullish(nb.badge, ovNb.badge, config.badge);
+    const presentationOptions = firstDefined(nb.presentationOptions, ovNb.presentationOptions, config.presentationOptions);
+```
+
+Add `badge` into the `push` object (only when it is a number, so `0` is included but
+`undefined`/`''` is not):
+
+```js
+      push: {
+        sound: {
+          name: customSound,
+          ...(interruptionLevel === 'critical' ? { critical: 1, volume: 1.0 } : {}),
+        },
+        ...(interruptionLevel ? { 'interruption-level': interruptionLevel } : {}),
+        ...(typeof badge === 'number' ? { badge } : {}),
+      },
+```
+
+And add `presentation_options` into `data` (spread near the other top-level keys), only
+when it's a non-empty array:
+
+```js
+      ...(Array.isArray(presentationOptions) && presentationOptions.length > 0
+        ? { presentation_options: presentationOptions }
+        : {}),
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `npx mocha test/unit/build-payload.spec.js`
+Expected: PASS — 39 passing
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/build-payload.js test/unit/build-payload.spec.js
+git commit -m "feat: add badge and presentation_options to payload builder"
 ```
 
 ---
@@ -1519,19 +1767,26 @@ git commit -m "feat: add auto-clear-on-action payload builder"
 
 **Interfaces:**
 - Consumes: `node-red-contrib-home-assistant-websocket/dist/homeAssistant` (`getHomeAssistant`) — verified against the installed `0.80.3` source at `/home/steve/Documents/docker/hosted-external/node-red/volumes/user/node_modules/node-red-contrib-home-assistant-websocket/dist/homeAssistant/index.js` and `HomeAssistant.js`.
-- Produces: `connect(serverConfigNode)`, `subscribeToActionEvents(homeAssistant, subscriberId, handler)`, `unsubscribeFromActionEvents(homeAssistant, subscriberId, handler)`, `sendNotification(homeAssistant, deviceName, serviceData)`, `fetchUsers(homeAssistant)`, `getNotifyTargets(homeAssistant)`, `getCameraEntities(homeAssistant)`, `ACTION_EVENT_TYPE`, `ACTION_EVENT_BUS_NAME` — consumed by Task 12 (node registration) and Tasks 13–17 (all runtime behaviors), and by Task 21/22 (picker admin endpoints).
+- Produces: `connect(serverConfigNode)`, `subscribeToActionEvents(homeAssistant, subscriberId, handler)`, `unsubscribeFromActionEvents(homeAssistant, subscriberId, handler)`, `sendNotification(homeAssistant, deviceName, serviceData)`, `callAction(homeAssistant, domain, service, data, target)`, `fetchUsers(homeAssistant)`, `getNotifyTargets(homeAssistant)`, `getEntities(homeAssistant, prefix)`, `getCameraEntities(homeAssistant)`, `getCallableServices(homeAssistant)`, `ACTION_EVENT_TYPES`, `actionBusName(eventType)` — consumed by Task 12 (node registration) and Tasks 13–17, 15.5 (all runtime behaviors), and by Tasks 21/22/30 (picker admin endpoints).
 
 Not unit-tested directly (it's a thin wrapper over a live external client with no pure logic of its own) — exercised by the integration tests in Tasks 12–17 via a `proxyquire`-injected fake.
 
+**[REV2] Dual-event subscription.** The node listens for BOTH the current
+`mobile_app_notification_action` event and the legacy/deprecated
+`ios.notification_action_fired` event, so it works on old and new HA/app versions. The
+palette's `eventsList` maps one subscriber key to one event type, so this task uses two
+synthetic keys per node (`${subscriberId}::0`, `::1`) and adds the same handler on both
+bus names. The action-id field differs (`action` on the modern event, `actionName` on
+the legacy one) — normalization happens in the node handler (Task 15), not here.
+
 **Verified facts this task's code depends on (do not re-derive — confirmed by reading the installed package source):**
 - `getHomeAssistant(serverConfigNode)` — exported from `dist/homeAssistant/index.js`, returns/creates a cached `HomeAssistant` client keyed by the server config node's `id`.
-- The client exposes: `eventsList` (a plain object, `{[subscriberId]: eventType}`, driving what the underlying websocket subscribes to), `isConnected` (getter), `subscribeEvents()` (re-subscribes over websocket using the current `eventsList`), `addListener(name, handler, {once})` / `removeListener(name, handler)` (delegate to an internal `EventEmitter`), `callService(domain, service, data, target)`, `send(rawMessage)`, `getServices()` (returns `{domain: {service: meta}}`), `getStates()` (returns `{entity_id: stateObj}`).
+- The client exposes: `eventsList` (a plain object, `{[subscriberKey]: eventType}`, driving what the underlying websocket subscribes to), `isConnected` (getter), `subscribeEvents()` (re-subscribes over websocket using the current `eventsList`), `addListener(name, handler, {once})` / `removeListener(name, handler)` (delegate to an internal `EventEmitter`), `callService(domain, service, data, target)`, `send(rawMessage)`, `getServices()` (returns `{domain: {service: meta}}`), `getStates()` (returns `{entity_id: stateObj}`).
 - Specific event-type subscriptions arrive on the bus under the name `` `ha_events:${eventType}` `` (confirmed via `dist/nodes/events-all/events.js`'s `startListeners` and the `HA_EVENTS` constant `"ha_events"` in `dist/const.js`).
-- The handler for `ha_events:ios.notification_action_fired` receives the same object shape the original subflow's `server-events` node exposed as `msg.payload` — i.e. `event.event.actionName`, `event.event.action_data.{tag,deviceName,allServices,populateUserInfo,clearNotificationsOnAction}`, `event.context.user_id` (confirmed by cross-referencing the original subflow's `build message`/`belongs here?` function code, which is ground truth extracted from the live production `flows.json`, against the palette's `eventData` output-property resolver in `TypedInputService.js`, which passes the raw bus-emitted object through unmodified).
+- The legacy `ha_events:ios.notification_action_fired` handler receives the shape the original subflow's `server-events` node exposed as `msg.payload` — `event.event.actionName`, `event.event.action_data.{tag,deviceName,allServices,populateUserInfo,clearNotificationsOnAction}`, `event.context.user_id` (ground truth from the extracted subflow code + the palette's `eventData` resolver in `TypedInputService.js`, which passes the raw bus object through unmodified). **[REV2]** The modern `mobile_app_notification_action` handler receives the same wrapper shape but with the action id at `event.event.action` (not `actionName`); `action_data` is at `event.event.action_data` on both. This modern-shape mapping is derived from the companion-app docs (action / reply_text / action_data fields), NOT verified against a live event — flagged for confirmation during the Task 27 npm-link smoke test. The normalizer in Task 15 reads `event.event.action ?? event.event.actionName`, so a wrong guess degrades gracefully to the legacy field.
 - The config node type for "which HA server" is `"server"` (confirmed in `dist/index.html`'s `RED.nodes.registerType` calls).
 
-**Genuinely unverified against a live call — flagged for manual confirmation during Task 16 (not blocking, defensive code handles both shapes):**
-- Whether `homeAssistant.send({type: 'config/auth/list'})` resolves directly to the array of users, or to a wrapped `{result: [...]}` envelope.
+**[REV2] Resolved (was flagged unverified):** `homeAssistant.send({type:'config/auth/list'})` resolves to a **bare array** — `home-assistant-js-websocket`'s `sendMessagePromise` resolves `message.result`, so the envelope is already unwrapped. `fetchUsers` returns the array directly; no `{result}` branch needed.
 
 - [ ] **Step 1: Write the implementation**
 
@@ -1541,24 +1796,32 @@ Not unit-tested directly (it's a thin wrapper over a live external client with n
 
 const { getHomeAssistant } = require('node-red-contrib-home-assistant-websocket/dist/homeAssistant');
 
-const ACTION_EVENT_TYPE = 'ios.notification_action_fired';
-const ACTION_EVENT_BUS_NAME = `ha_events:${ACTION_EVENT_TYPE}`;
+// [REV2] Modern event first, legacy second — the node listens for both.
+const ACTION_EVENT_TYPES = ['mobile_app_notification_action', 'ios.notification_action_fired'];
+
+function actionBusName(eventType) {
+  return `ha_events:${eventType}`;
+}
 
 function connect(serverConfigNode) {
   return getHomeAssistant(serverConfigNode);
 }
 
 function subscribeToActionEvents(homeAssistant, subscriberId, handler) {
-  homeAssistant.eventsList[subscriberId] = ACTION_EVENT_TYPE;
-  homeAssistant.addListener(ACTION_EVENT_BUS_NAME, handler);
+  ACTION_EVENT_TYPES.forEach((eventType, i) => {
+    homeAssistant.eventsList[`${subscriberId}::${i}`] = eventType;
+    homeAssistant.addListener(actionBusName(eventType), handler);
+  });
   if (homeAssistant.isConnected) {
     homeAssistant.subscribeEvents();
   }
 }
 
 function unsubscribeFromActionEvents(homeAssistant, subscriberId, handler) {
-  homeAssistant.removeListener(ACTION_EVENT_BUS_NAME, handler);
-  delete homeAssistant.eventsList[subscriberId];
+  ACTION_EVENT_TYPES.forEach((eventType, i) => {
+    homeAssistant.removeListener(actionBusName(eventType), handler);
+    delete homeAssistant.eventsList[`${subscriberId}::${i}`];
+  });
   if (homeAssistant.isConnected) {
     homeAssistant.subscribeEvents();
   }
@@ -1568,11 +1831,14 @@ async function sendNotification(homeAssistant, deviceName, serviceData) {
   return homeAssistant.callService('notify', deviceName, serviceData, undefined);
 }
 
+// [REV2] Generic service call for the tap-to-perform feature.
+async function callAction(homeAssistant, domain, service, data, target) {
+  return homeAssistant.callService(domain, service, data, target);
+}
+
 async function fetchUsers(homeAssistant) {
   const result = await homeAssistant.send({ type: 'config/auth/list' });
-  if (Array.isArray(result)) return result;
-  if (result && Array.isArray(result.result)) return result.result;
-  return [];
+  return Array.isArray(result) ? result : [];
 }
 
 function getNotifyTargets(homeAssistant) {
@@ -1580,21 +1846,38 @@ function getNotifyTargets(homeAssistant) {
   return Object.keys(services.notify || {});
 }
 
+function getEntities(homeAssistant, prefix) {
+  const ids = Object.keys(homeAssistant.getStates() || {});
+  return (prefix ? ids.filter((id) => id.startsWith(prefix)) : ids).sort();
+}
+
 function getCameraEntities(homeAssistant) {
-  const states = homeAssistant.getStates() || {};
-  return Object.keys(states).filter((id) => id.startsWith('camera.'));
+  return getEntities(homeAssistant, 'camera.');
+}
+
+// [REV2] "domain.service" strings for the tap-to-perform service picker.
+function getCallableServices(homeAssistant) {
+  const services = homeAssistant.getServices() || {};
+  const out = [];
+  Object.keys(services).forEach((domain) => {
+    Object.keys(services[domain] || {}).forEach((service) => out.push(`${domain}.${service}`));
+  });
+  return out.sort();
 }
 
 module.exports = {
-  ACTION_EVENT_TYPE,
-  ACTION_EVENT_BUS_NAME,
+  ACTION_EVENT_TYPES,
+  actionBusName,
   connect,
   subscribeToActionEvents,
   unsubscribeFromActionEvents,
   sendNotification,
+  callAction,
   fetchUsers,
   getNotifyTargets,
+  getEntities,
   getCameraEntities,
+  getCallableServices,
 };
 ```
 
@@ -1658,8 +1941,9 @@ function createMockHomeAssistant(overrides = {}) {
 
   return {
     client,
-    emitFakeActionEvent(payload) {
-      emitter.emit('ha_events:ios.notification_action_fired', payload);
+    // [REV2] default to the modern event; pass eventType to test the legacy path.
+    emitFakeActionEvent(payload, eventType = 'mobile_app_notification_action') {
+      emitter.emit(`ha_events:${eventType}`, payload);
     },
   };
 }
@@ -1776,11 +2060,29 @@ module.exports = function (RED) {
       showTraffic: !!config.showTraffic,
       showUserLocation: !!config.showUserLocation,
       contentUrl: config.contentUrl || '',
+      contentType: config.contentType || '',
       imagePath: config.imagePath || '',
       videoPath: config.videoPath || '',
       audioPath: config.audioPath || '',
       lazyLoading: !!config.lazyLoading,
       hideThumbnail: !!config.hideThumbnail,
+      // [REV2] badge + presentation_options
+      badge: config.badge === undefined || config.badge === '' ? undefined : Number(config.badge),
+      presentationOptions: Array.isArray(config.presentationOptions) ? config.presentationOptions : [],
+      // [REV2] stagger between per-device sends; default non-zero (protects APNs, see Task 18)
+      staggerMs: config.staggerMs === undefined || config.staggerMs === '' ? 1000 : Number(config.staggerMs),
+      // [REV2] Live Activity mode + its fields (see Task 31)
+      liveActivity: !!config.liveActivity,
+      progress: config.progress === undefined || config.progress === '' ? undefined : Number(config.progress),
+      progressMax: config.progressMax === undefined || config.progressMax === '' ? undefined : Number(config.progressMax),
+      chronometer: !!config.chronometer,
+      when: config.when === undefined || config.when === '' ? undefined : Number(config.when),
+      whenRelative: !!config.whenRelative,
+      notificationIcon: config.notificationIcon || '',
+      notificationIconColor: config.notificationIconColor || '',
+      color: config.color || '',
+      backgroundColor: config.backgroundColor || '',
+      textColor: config.textColor || '',
       debugMode: !!config.debugMode,
     };
   }
@@ -2013,9 +2315,11 @@ Add these functions at module scope (below `HaIosNotificationNode`, above `RED.n
           dateCreated: now,
           message: msg,
         });
+        // [REV2] persist after EACH successful send, so a mid-fan-out failure never
+        // silently drops an already-delivered device from the tracking store.
+        node.context().set('sentMessages', stored);
       }
 
-      node.context().set('sentMessages', stored);
       node.status({ text: `sent to ${payloads.length} service(s)`, shape: 'dot', fill: 'green' });
       done();
     } catch (err) {
@@ -2178,7 +2482,7 @@ git commit -m "feat: implement manual clear-notification path"
 
 **Interfaces:**
 - Consumes: `haClient.subscribeToActionEvents`/`unsubscribeFromActionEvents` (Task 11), `lib/message-store.js` `findMatch` (Task 4), `node.actions` (Task 12, for output-index lookup by action id).
-- Produces: when a `ha_events:ios.notification_action_fired` event fires and its `action_data.tag`+`deviceName` matches this node's own `sentMessages`, sends a message on the output whose configured action id equals `event.event.actionName`. Non-matching events (belonging to a different node instance) are silently ignored — this is the multi-instance safety mechanism.
+- Produces: `normalizeActionId(eventPayload)` (module scope) and the action-received handler. **[REV2]** When EITHER `mobile_app_notification_action` OR `ios.notification_action_fired` fires and its `action_data.tag`+`deviceName` matches this node's own `sentMessages`, sends on the output whose configured action id equals the normalized action id (`event.event.action ?? event.event.actionName`), and sets `msg.actionId` to that normalized id. Non-matching events (a different node instance's, or another platform's) are silently ignored — the multi-instance safety mechanism. Consumed by Task 15.5 (tap-to-perform), 16 (user-info), 17 (auto-clear), 19 (debug).
 
 - [ ] **Step 1: Append the failing tests**
 
@@ -2257,6 +2561,74 @@ describe('action-received handling', () => {
       }, 20);
     });
   });
+
+  it('[REV2] routes via the modern `action` field on mobile_app_notification_action', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          msg.actionId.should.equal('1');
+          done();
+        });
+        mock.emitFakeActionEvent(
+          {
+            event: {
+              action: '1', // modern field name
+              action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+            },
+            context: { user_id: 'user-123' },
+          },
+          'mobile_app_notification_action'
+        );
+      }, 20);
+    });
+  });
+
+  it('[REV2] routes via the legacy `actionName` field on ios.notification_action_fired', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          msg.actionId.should.equal('1');
+          done();
+        });
+        mock.emitFakeActionEvent(
+          {
+            event: {
+              actionName: '1', // legacy field name
+              action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+            },
+            context: { user_id: 'user-123' },
+          },
+          'ios.notification_action_fired'
+        );
+      }, 20);
+    });
+  });
 });
 ```
 
@@ -2295,6 +2667,16 @@ In `HaIosNotificationNode`, after setting `node.outputCount = node.actions.lengt
 Add the handler function at module scope:
 
 ```js
+  // [REV2] Normalize the action id across both event shapes: the modern
+  // mobile_app_notification_action carries `action`; the legacy
+  // ios.notification_action_fired carries `actionName`.
+  function normalizeActionId(eventPayload) {
+    const raw = eventPayload.action !== undefined && eventPayload.action !== null
+      ? eventPayload.action
+      : eventPayload.actionName;
+    return raw === undefined || raw === null ? undefined : String(raw);
+  }
+
   function handleActionReceived(node, event) {
     const eventPayload = event && event.event;
     if (!eventPayload || !eventPayload.action_data) return;
@@ -2306,15 +2688,18 @@ Add the handler function at module scope:
     const owned = findMatch(stored, tag, deviceName);
     if (!owned) return; // belongs to a different node instance — ignore
 
+    const actionId = normalizeActionId(eventPayload);
+    if (actionId === undefined) return;
+
     const actionIndex = node.actions.findIndex((a, i) => {
       const id = a.id !== undefined && a.id !== null && a.id !== '' ? String(a.id) : String(i + 1);
-      return id === String(eventPayload.actionName);
+      return id === actionId;
     });
     if (actionIndex === -1) return;
 
     const outputs = new Array(node.outputCount).fill(null);
-    outputs[actionIndex] = { payload: event, matchedMessage: owned.message };
-    node.status({ text: `action ${eventPayload.actionName} received`, shape: 'dot', fill: 'green' });
+    outputs[actionIndex] = { payload: event, actionId, matchedMessage: owned.message };
+    node.status({ text: `action ${actionId} received`, shape: 'dot', fill: 'green' });
     node.send(outputs);
   }
 ```
@@ -2322,7 +2707,7 @@ Add the handler function at module scope:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 8 passing
+Expected: PASS — 10 passing
 
 - [ ] **Step 5: Commit**
 
@@ -2343,7 +2728,9 @@ git commit -m "feat: implement action-received routing with ownership matching"
 - Consumes: `haClient.fetchUsers` (Task 11).
 - Produces: when the notification that was actioned had `populateUserInfo: true`, the output message's `msg.userData` is set to the HA user record matching `event.context.user_id`.
 
-**Manual verification note (from Task 11):** confirm live whether `homeAssistant.send({type:'config/auth/list'})` returns a bare array or `{result:[...]}` before trusting this in production — `haClient.fetchUsers` already defensively handles both, but confirm against the real BEEbox HA instance once this node is npm-linked in (Task 27's dev workflow) by triggering one real actionable notification with `userInfo` enabled and inspecting `node.warn`/debug output.
+**[REV2] Resolved:** `homeAssistant.send({type:'config/auth/list'})` returns a bare
+array (`sendMessagePromise` resolves `message.result`), so `haClient.fetchUsers` returns
+it directly — no envelope handling needed. The earlier "verify live" caveat is closed.
 
 - [ ] **Step 1: Append the failing tests**
 
@@ -2436,6 +2823,10 @@ Expected: FAIL — `msg.userData` is never set, so the first new test's assertio
 
 Change `handleActionReceived` from a sync function to async, and fetch users when needed:
 
+**[REV2]** This rewrite is the canonical `handleActionReceived` — it keeps the Task 15
+`normalizeActionId` logic and `msg.actionId`, and Task 17 appends the auto-clear + state
+cleanup after `node.send(outputs)`.
+
 ```js
   async function handleActionReceived(node, event) {
     const eventPayload = event && event.event;
@@ -2448,13 +2839,16 @@ Change `handleActionReceived` from a sync function to async, and fetch users whe
     const owned = findMatch(stored, tag, deviceName);
     if (!owned) return;
 
+    const actionId = normalizeActionId(eventPayload); // event.action ?? event.actionName
+    if (actionId === undefined) return;
+
     const actionIndex = node.actions.findIndex((a, i) => {
       const id = a.id !== undefined && a.id !== null && a.id !== '' ? String(a.id) : String(i + 1);
-      return id === String(eventPayload.actionName);
+      return id === actionId;
     });
     if (actionIndex === -1) return;
 
-    const outMsg = { payload: event, matchedMessage: owned.message };
+    const outMsg = { payload: event, actionId, matchedMessage: owned.message };
 
     if (populateUserInfo && event.context && event.context.user_id) {
       try {
@@ -2467,7 +2861,7 @@ Change `handleActionReceived` from a sync function to async, and fetch users whe
 
     const outputs = new Array(node.outputCount).fill(null);
     outputs[actionIndex] = outMsg;
-    node.status({ text: `action ${eventPayload.actionName} received`, shape: 'dot', fill: 'green' });
+    node.status({ text: `action ${actionId} received`, shape: 'dot', fill: 'green' });
     node.send(outputs);
   }
 ```
@@ -2483,7 +2877,7 @@ Since `handleActionReceived` is now `async`, update its call site so it isn't aw
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 10 passing
+Expected: PASS — 12 passing
 
 - [ ] **Step 5: Commit**
 
@@ -2552,13 +2946,48 @@ describe('auto-clear on action', () => {
       }, 20);
     });
   });
+
+  it('[REV2] purges the tracking store for the tag after an action is handled', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], isClearNotificationsOnAction: true,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        mock.emitFakeActionEvent({
+          event: {
+            action: '1',
+            action_data: {
+              tag: 'FRONT_DOOR', deviceName: 'my_iphone',
+              allServices: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
+              clearNotificationsOnAction: true,
+            },
+          },
+          context: { user_id: 'user-123' },
+        });
+        setTimeout(() => {
+          (n1.context().get('sentMessages') || []).should.have.length(0);
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
 });
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: FAIL — no clear call is made, `calls` stays empty.
+Expected: FAIL — no clear call is made, `calls` stays empty; and the tracking store is not purged.
 
 - [ ] **Step 3: Extend `ha-ios-notification.js`**
 
@@ -2568,7 +2997,7 @@ Add to the requires:
 const { buildAutoClearPayloads } = require('./lib/build-clear-payload');
 ```
 
-In `handleActionReceived`, after sending the output message (after `node.send(outputs);`), add:
+In `handleActionReceived`, after sending the output message (after `node.send(outputs);`), add. **[REV2]** After the clear calls, purge the tracking-store entries for this tag on **every** device in `allServices` (including the firing device) — mirroring v2's `cleanUpMessages`, so a duplicate/late action event for the same tag+device can't re-fire routing or a second auto-clear:
 
 ```js
     if (eventPayload.action_data.clearNotificationsOnAction) {
@@ -2581,12 +3010,30 @@ In `handleActionReceived`, after sending the output message (after `node.send(ou
         node.error(err);
       }
     }
+
+    // [REV2] State cleanup on any received action: remove this tag's tracking entries
+    // for every device in allServices (matches v2's cleanUpMessages), so duplicate/late
+    // events for the same notification can't re-trigger routing or auto-clear.
+    let after = node.context().get('sentMessages') || [];
+    (eventPayload.action_data.allServices || [{ deviceName }]).forEach((svc) => {
+      if (svc && svc.deviceName) after = messageStore.removeMatch(after, tag, svc.deviceName);
+    });
+    node.context().set('sentMessages', after);
 ```
+
+**[REV2] Consciously dropped:** v2 inserted a ~10s+jitter *sequencing delay* before
+routing the action output when `clearNotificationsOnAction` was set (subflow node
+`4e7303e30463dcac`). We drop it — delaying the user's action output by 10s is poor UX,
+and in this node the output and the clear calls are independent. This is a behavior
+change from v2; it goes in the migration notes (Task 26).
+
+Also ensure `messageStore` is required at the top of the file (added in Task 13); no new
+require is needed beyond `buildAutoClearPayloads`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 11 passing
+Expected: PASS — 14 passing
 
 - [ ] **Step 5: Commit**
 
@@ -2605,9 +3052,15 @@ git commit -m "feat: implement auto-clear-on-action"
 - Modify: `test/integration/ha-ios-notification.spec.js`
 
 **Interfaces:**
-- Produces: a `staggerMs` config field (default `0`, disabled) that, when non-zero, waits `staggerMs` between each per-device `sendNotification` call in `handleSend` (does not apply to `handleManualClear` or auto-clear, since those are lower-frequency, rarely-fanned-out-wide operations where v2's own rate limiting appears to target the primary send path).
+- Produces: `staggerMs` behavior in `handleSend` — waits `staggerMs` between each per-device `sendNotification` call. **[REV2]** Default is **1000 ms, not 0** (already wired into `normalizeNodeConfig` in Task 12), so multi-device fan-out is throttled out of the box — v2 always rate-limited fan-out (~5s), and shipping with it fully off would risk slamming APNs/HA for exactly the multi-device flows this node targets. Set `staggerMs: 0` to disable.
 
-This directly replaces v2's ad-hoc delay/rate-limit canvas nodes with an explicit, documented config option, per the design spec.
+**[REV2] Scope:** stagger applies to the send fan-out only. The manual-clear and
+auto-clear fan-outs are intentionally NOT staggered — clears are idempotent and far less
+bursty than sends. This is a conscious simplification of v2's throttle-everything wiring;
+noted in the migration docs (Task 26).
+
+This replaces v2's ad-hoc delay/rate-limit canvas nodes with an explicit, documented
+config option.
 
 - [ ] **Step 1: Append the failing test**
 
@@ -2624,7 +3077,7 @@ describe('rate limiting', () => {
       fakeServerFlowNode,
       {
         id: 'n1', type: 'ha-ios-notification', server: 'server1',
-        services: [{ deviceName: 'a' }, { deviceName: 'b' }], staggerMs: 50, actions: [], wires: [],
+        services: [{ deviceName: 'a' }, { deviceName: 'b' }], staggerMs: 100, actions: [], wires: [],
       },
     ];
     helper.load(nodeUnderTest, flow, () => {
@@ -2632,29 +3085,43 @@ describe('rate limiting', () => {
       n1.receive({ payload: {} });
       setTimeout(() => {
         timestamps.should.have.length(2);
-        (timestamps[1] - timestamps[0]).should.be.aboveOrEqual(45); // small slack for timer jitter
+        // generous lower bound — asserts "staggered", not an exact interval
+        (timestamps[1] - timestamps[0]).should.be.aboveOrEqual(70);
         done();
-      }, 150);
+      }, 300);
     });
   });
 
-  it('does not wait between sends when staggerMs is 0 (default)', function (done) {
+  it('[REV2] does not wait between sends when staggerMs is explicitly 0', function (done) {
     const timestamps = [];
     const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
       callService: async () => { timestamps.push(Date.now()); return {}; },
     });
     const flow = [
       fakeServerFlowNode,
-      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }, { deviceName: 'b' }], actions: [], wires: [] },
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }, { deviceName: 'b' }], staggerMs: 0, actions: [], wires: [] },
     ];
     helper.load(nodeUnderTest, flow, () => {
       const n1 = helper.getNode('n1');
       n1.receive({ payload: {} });
       setTimeout(() => {
         timestamps.should.have.length(2);
-        (timestamps[1] - timestamps[0]).should.be.below(45);
+        (timestamps[1] - timestamps[0]).should.be.below(50);
         done();
       }, 100);
+    });
+  });
+
+  it('[REV2] staggers by default (staggerMs unset -> 1000ms) — asserts config default, not timing', function (done) {
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }], actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.nodeConfig.staggerMs.should.equal(1000);
+      done();
     });
   });
 });
@@ -2667,11 +3134,8 @@ Expected: FAIL — sends happen back-to-back regardless of `staggerMs`, so the "
 
 - [ ] **Step 3: Extend `ha-ios-notification.js`**
 
-Add `staggerMs` to `normalizeNodeConfig`:
-
-```js
-      staggerMs: Number(config.staggerMs) || 0,
-```
+**[REV2]** `staggerMs` is already in `normalizeNodeConfig` (Task 12) with a default of
+`1000`. Do NOT re-add it. Only add the delay helper and the staggered loop here.
 
 Add a small delay helper at module scope:
 
@@ -2681,7 +3145,8 @@ Add a small delay helper at module scope:
   }
 ```
 
-In `handleSend`, change the `for (const item of payloads) { ... }` loop to stagger between iterations:
+In `handleSend`, change the `for (const item of payloads) { ... }` loop to stagger
+between iterations, keeping the [REV2] per-iteration persistence from Task 13:
 
 ```js
       const now = Date.now();
@@ -2696,6 +3161,7 @@ In `handleSend`, change the `for (const item of payloads) { ... }` loop to stagg
           dateCreated: now,
           message: msg,
         });
+        node.context().set('sentMessages', stored); // persist after each send
         if (node.nodeConfig.staggerMs > 0 && i < payloads.length - 1) {
           await delay(node.nodeConfig.staggerMs);
         }
@@ -2704,16 +3170,16 @@ In `handleSend`, change the `for (const item of payloads) { ... }` loop to stagg
 
 - [ ] **Step 4: Add the `staggerMs` field to the editor defaults in `ha-ios-notification.html`**
 
-In the `defaults` object, add:
+In the `defaults` object, add (**[REV2]** default 1000, matching `normalizeNodeConfig`):
 
 ```js
-      staggerMs: { value: 0 },
+      staggerMs: { value: 1000 },
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 13 passing
+Expected: PASS — 17 passing
 
 - [ ] **Step 6: Commit**
 
@@ -2826,16 +3292,17 @@ In `handleSend`, before the `for` loop, add trace logging:
       }
 ```
 
-In `handleActionReceived`, in the `outMsg` construction, add debug info conditionally. Change:
+In `handleActionReceived`, in the `outMsg` construction, add debug info conditionally.
+**[REV2]** The `outMsg` line now includes `actionId` (from Task 16). Change:
 
 ```js
-    const outMsg = { payload: event, matchedMessage: owned.message };
+    const outMsg = { payload: event, actionId, matchedMessage: owned.message };
 ```
 
 to:
 
 ```js
-    const outMsg = { payload: event, matchedMessage: owned.message };
+    const outMsg = { payload: event, actionId, matchedMessage: owned.message };
 
     if (node.nodeConfig.debugMode) {
       outMsg._debug = {
@@ -2843,14 +3310,14 @@ to:
         matchedDeviceName: deviceName,
         rawEvent: event,
       };
-      node.trace(`ha-ios-notification: action ${eventPayload.actionName} matched tag ${tag}`);
+      node.trace(`ha-ios-notification: action ${actionId} matched tag ${tag}`);
     }
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 15 passing
+Expected: PASS — 19 passing
 
 - [ ] **Step 5: Commit**
 
@@ -2861,19 +3328,696 @@ git commit -m "feat: add debug mode logging and msg._debug"
 
 ---
 
+## Task 19.1: `clear_badge` command [REV2 — NEW]
+
+**[REV2]** Adds a second input command alongside `msg.clear`: `msg.clearBadge = true`
+sends the `clear_badge` command (silently zero the app-icon badge) to the configured/
+overridden services, without showing a notification.
+
+**Files:**
+- Modify: `ha-ios-notification.js`
+- Modify: `test/integration/ha-ios-notification.spec.js`
+
+**Interfaces:**
+- Consumes: `haClient.sendNotification` (a `clear_badge` is just a notify call with
+  `message: "clear_badge"`).
+- Produces: on `msg.clearBadge === true` (and not `msg.clear`), sends
+  `{ data: { message: 'clear_badge' } }` to each target service.
+
+- [ ] **Step 1: Append the failing test**
+
+```js
+// append to test/integration/ha-ios-notification.spec.js
+
+describe('clear_badge command', () => {
+  it('sends clear_badge to each service when msg.clearBadge is true', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push({ service, data }); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }, { deviceName: 'b' }], actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ clearBadge: true });
+      setTimeout(() => {
+        calls.should.have.length(2);
+        calls[0].data.message.should.equal('clear_badge');
+        done();
+      }, 30);
+    });
+  });
+
+  it('does not send a notification for a clearBadge message (no title/actions)', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push(data); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }], title: 'Should Not Send', actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ clearBadge: true });
+      setTimeout(() => {
+        calls.should.have.length(1);
+        calls[0].message.should.equal('clear_badge');
+        (calls[0].title === undefined).should.equal(true);
+        done();
+      }, 30);
+    });
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx mocha test/integration/ha-ios-notification.spec.js`
+Expected: FAIL — `clearBadge` is unhandled, so no `clear_badge` call is made.
+
+- [ ] **Step 3: Extend `ha-ios-notification.js`**
+
+In the `node.on('input', ...)` handler, add a `clearBadge` branch before the `msg.clear`
+branch:
+
+```js
+      if (msg.clearBadge) {
+        handleClearBadge(node, msg, send, done);
+        return;
+      }
+```
+
+Add the handler at module scope:
+
+```js
+  async function handleClearBadge(node, msg, send, done) {
+    const override = msg.notificationOverride || {};
+    const services = (override.services && override.services.length > 0)
+      ? override.services
+      : node.nodeConfig.services;
+    if (!services || services.length === 0) {
+      node.status({ text: 'no services defined', shape: 'ring', fill: 'red' });
+      done();
+      return;
+    }
+    try {
+      for (const service of services) {
+        await haClient.sendNotification(node.homeAssistant, service.deviceName, { message: 'clear_badge' });
+      }
+      node.status({ text: `badge cleared on ${services.length} service(s)`, shape: 'dot', fill: 'blue' });
+      done();
+    } catch (err) {
+      node.error(err, msg);
+      done(err);
+    }
+  }
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `npx mocha test/integration/ha-ios-notification.spec.js`
+Expected: PASS — 21 passing
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ha-ios-notification.js test/integration/ha-ios-notification.spec.js
+git commit -m "feat: add clear_badge command"
+```
+
+---
+
+## Task 19.2: Tap-to-perform — service call on action receipt + picker endpoints [REV2 — NEW]
+
+**[REV2]** When a received action's configured entry carries a `targetService`
+(`"domain.service"`) — optionally with `targetEntityId` and `targetData` — the node
+calls that HA service directly, in addition to emitting on the action's output. Also adds
+the two admin endpoints the editor's tap-to-perform pickers use (Task 24.5).
+
+**Files:**
+- Modify: `ha-ios-notification.js`
+- Modify: `test/integration/ha-ios-notification.spec.js`
+
+**Interfaces:**
+- Consumes: `haClient.callAction`, `haClient.getCallableServices`, `haClient.getEntities`
+  (Task 11); the matched action config from `node.actions[actionIndex]` (raw config
+  carries `targetService`/`targetEntityId`/`targetData`, per Task 3).
+- Produces: a `callService` on action receipt when a target is configured; and
+  `GET /ha-ios-notification/callable-services` and `GET /ha-ios-notification/entities`
+  admin endpoints.
+
+- [ ] **Step 1: Append the failing test**
+
+```js
+// append to test/integration/ha-ios-notification.spec.js
+
+describe('tap-to-perform', () => {
+  it('calls the configured HA service when the matched action has a targetService', function (done) {
+    const calls = [];
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data, target) => { calls.push({ domain, service, data, target }); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Unlock', targetService: 'lock.unlock', targetEntityId: 'lock.front_door' }],
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        mock.emitFakeActionEvent({
+          event: {
+            action: '1',
+            action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+          },
+          context: { user_id: 'user-123' },
+        });
+        setTimeout(() => {
+          const lockCall = calls.find((c) => c.domain === 'lock' && c.service === 'unlock');
+          lockCall.should.be.ok();
+          lockCall.target.should.eql({ entity_id: 'lock.front_door' });
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
+
+  it('does not call any service when the matched action has no targetService', function (done) {
+    const calls = [];
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service) => { calls.push(`${domain}.${service}`); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        calls.length = 0; // ignore the initial notify send
+        mock.emitFakeActionEvent({
+          event: { action: '1', action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] } },
+          context: { user_id: 'u' },
+        });
+        setTimeout(() => {
+          calls.should.have.length(0);
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx mocha test/integration/ha-ios-notification.spec.js`
+Expected: FAIL — no `lock.unlock` call is made.
+
+- [ ] **Step 3: Extend `handleActionReceived`**
+
+In `handleActionReceived`, after `node.send(outputs);` and before the Task 17 auto-clear
+block, add the tap-to-perform call:
+
+```js
+    const matchedAction = node.actions[actionIndex];
+    if (matchedAction && matchedAction.targetService) {
+      const dot = String(matchedAction.targetService).indexOf('.');
+      const domain = dot > 0 ? matchedAction.targetService.slice(0, dot) : '';
+      const service = dot > 0 ? matchedAction.targetService.slice(dot + 1) : '';
+      if (domain && service) {
+        try {
+          const target = matchedAction.targetEntityId ? { entity_id: matchedAction.targetEntityId } : undefined;
+          await haClient.callAction(node.homeAssistant, domain, service, matchedAction.targetData || {}, target);
+        } catch (err) {
+          node.error(err);
+        }
+      }
+    }
+```
+
+- [ ] **Step 4: Add the picker admin endpoints**
+
+Near the other `RED.httpAdmin.get` registrations (added in Tasks 21–22), add:
+
+```js
+  RED.httpAdmin.get('/ha-ios-notification/callable-services', RED.auth.needsPermission('flows.write'), function (req, res) {
+    const serverNode = RED.nodes.getNode(req.query.server);
+    if (!serverNode) { res.json({ services: [] }); return; }
+    try {
+      res.json({ services: haClient.getCallableServices(haClient.connect(serverNode)) });
+    } catch (err) {
+      res.json({ services: [] });
+    }
+  });
+
+  RED.httpAdmin.get('/ha-ios-notification/entities', RED.auth.needsPermission('flows.write'), function (req, res) {
+    const serverNode = RED.nodes.getNode(req.query.server);
+    if (!serverNode) { res.json({ entities: [] }); return; }
+    try {
+      res.json({ entities: haClient.getEntities(haClient.connect(serverNode), req.query.prefix) });
+    } catch (err) {
+      res.json({ entities: [] });
+    }
+  });
+```
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `npx mocha test/integration/ha-ios-notification.spec.js`
+Expected: PASS — 23 passing
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add ha-ios-notification.js test/integration/ha-ios-notification.spec.js
+git commit -m "feat: tap-to-perform service call on action receipt + picker endpoints"
+```
+
+---
+
+## Task 19.3: `lib/build-live-activity.js` — Live Activity payload builder [REV2 — NEW]
+
+**[REV2]** Live Activities are standard notify calls with `data.data.live_update: true`
++ a required `tag` and optional progress/chronometer/color fields. This pure builder
+mirrors `buildNotificationPayloads`'s return shape so the runtime can reuse the send
+loop. Ending an activity reuses the existing clear path (same tag), so no new clear code
+is needed.
+
+**Files:**
+- Create: `lib/build-live-activity.js`
+- Test: `test/unit/build-live-activity.spec.js`
+
+**Interfaces:**
+- Consumes: `sanitizeTag` (Task 2).
+- Produces: `buildLiveActivityPayloads(config, override): {error, payloads: Array<{service, tag, action, payload}>}` — consumed by Task 19.4.
+
+- [ ] **Step 1: Write the failing tests**
+
+```js
+// test/unit/build-live-activity.spec.js
+'use strict';
+
+require('should');
+const { buildLiveActivityPayloads } = require('../../lib/build-live-activity');
+
+function baseConfig(overrides = {}) {
+  return {
+    tag: 'laundry', services: [{ deviceName: 'my_iphone' }],
+    title: 'Laundry', message: 'Washing', progress: 0, progressMax: 100,
+    chronometer: false, when: undefined, whenRelative: false,
+    notificationIcon: '', notificationIconColor: '', color: '',
+    backgroundColor: '', textColor: '', ...overrides,
+  };
+}
+
+describe('build-live-activity', () => {
+  it('errors when no services are defined', () => {
+    const result = buildLiveActivityPayloads(baseConfig({ services: [] }), {});
+    result.error.should.equal('no services defined');
+  });
+
+  it('sets live_update true and the tag under data.data', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig({ tag: 'laundry' }), {});
+    const inner = payloads[0].payload.data.data;
+    inner.live_update.should.equal(true);
+    inner.tag.should.equal('LAUNDRY');
+  });
+
+  it('puts title and message at data level', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig(), {});
+    payloads[0].payload.data.title.should.equal('Laundry');
+    payloads[0].payload.data.message.should.equal('Washing');
+  });
+
+  it('includes progress and progress_max when set (including 0)', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig({ progress: 0, progressMax: 100 }), {});
+    const inner = payloads[0].payload.data.data;
+    inner.progress.should.equal(0);
+    inner.progress_max.should.equal(100);
+  });
+
+  it('includes chronometer/when/when_relative when chronometer is on', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig({ chronometer: true, when: 3600, whenRelative: true }), {});
+    const inner = payloads[0].payload.data.data;
+    inner.chronometer.should.equal(true);
+    inner.when.should.equal(3600);
+    inner.when_relative.should.equal(true);
+  });
+
+  it('maps color fields to snake_case keys when set', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig({
+      color: '#111', backgroundColor: '#222', textColor: '#333',
+      notificationIcon: 'mdi:washing-machine', notificationIconColor: '#444',
+    }), {});
+    const inner = payloads[0].payload.data.data;
+    inner.color.should.equal('#111');
+    inner.background_color.should.equal('#222');
+    inner.text_color.should.equal('#333');
+    inner.notification_icon.should.equal('mdi:washing-machine');
+    inner.notification_icon_color.should.equal('#444');
+  });
+
+  it('omits unset optional fields', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig({ color: '', backgroundColor: '' }), {});
+    const inner = payloads[0].payload.data.data;
+    inner.should.not.have.property('color');
+    inner.should.not.have.property('background_color');
+  });
+
+  it('fans out one payload per service and reuses the tag', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig({ services: [{ deviceName: 'a' }, { deviceName: 'b' }] }), {});
+    payloads.should.have.length(2);
+    payloads[0].action.should.equal('notify.a');
+    payloads[1].tag.should.equal(payloads[0].tag);
+  });
+
+  it('a msg-level services override replaces the target list', () => {
+    const { payloads } = buildLiveActivityPayloads(baseConfig(), { services: [{ deviceName: 'z' }] });
+    payloads.should.have.length(1);
+    payloads[0].action.should.equal('notify.z');
+  });
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `npx mocha test/unit/build-live-activity.spec.js`
+Expected: FAIL — `Cannot find module '../../lib/build-live-activity'`
+
+- [ ] **Step 3: Write the implementation**
+
+```js
+// lib/build-live-activity.js
+'use strict';
+
+const { sanitizeTag } = require('./sanitize-tag');
+
+function pickNullish(...values) {
+  for (const v of values) {
+    if (v !== undefined && v !== null) return v;
+  }
+  return undefined;
+}
+
+function buildLiveActivityPayloads(config, override) {
+  const safeOverride = override || {};
+  const la = safeOverride.liveActivity || {};
+  const services =
+    safeOverride.services && safeOverride.services.length > 0
+      ? safeOverride.services
+      : config.services || [];
+
+  if (!services || services.length === 0) {
+    return { error: 'no services defined', payloads: [] };
+  }
+
+  const tag = sanitizeTag(pickNullish(safeOverride.tag, config.tag), config.title);
+  const title = pickNullish(la.title, config.title) || '';
+  const message = pickNullish(la.message, config.message) || '';
+
+  const progress = pickNullish(la.progress, config.progress);
+  const progressMax = pickNullish(la.progressMax, config.progressMax);
+  const chronometer = pickNullish(la.chronometer, config.chronometer) || false;
+  const when = pickNullish(la.when, config.when);
+  const whenRelative = pickNullish(la.whenRelative, config.whenRelative) || false;
+  const notificationIcon = pickNullish(la.notificationIcon, config.notificationIcon);
+  const notificationIconColor = pickNullish(la.notificationIconColor, config.notificationIconColor);
+  const color = pickNullish(la.color, config.color);
+  const backgroundColor = pickNullish(la.backgroundColor, config.backgroundColor);
+  const textColor = pickNullish(la.textColor, config.textColor);
+  const url = pickNullish(la.url, config.notificationUrl);
+
+  const payloads = services.map((service) => {
+    const inner = { tag, live_update: true };
+    if (typeof progress === 'number') inner.progress = progress;
+    if (typeof progressMax === 'number') inner.progress_max = progressMax;
+    if (chronometer) {
+      inner.chronometer = true;
+      if (typeof when === 'number') inner.when = when;
+      inner.when_relative = !!whenRelative;
+    }
+    if (notificationIcon) inner.notification_icon = notificationIcon;
+    if (notificationIconColor) inner.notification_icon_color = notificationIconColor;
+    if (color) inner.color = color;
+    if (backgroundColor) inner.background_color = backgroundColor;
+    if (textColor) inner.text_color = textColor;
+    if (url) inner.url = url;
+
+    return {
+      service,
+      tag,
+      action: `notify.${service.deviceName}`,
+      payload: { data: { title, message, data: inner } },
+    };
+  });
+
+  return { error: null, payloads };
+}
+
+module.exports = { buildLiveActivityPayloads };
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `npx mocha test/unit/build-live-activity.spec.js`
+Expected: PASS — 9 passing
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/build-live-activity.js test/unit/build-live-activity.spec.js
+git commit -m "feat: add Live Activity payload builder"
+```
+
+---
+
+## Task 19.4: Live Activity send-path branch [REV2 — NEW]
+
+**[REV2]** When the node is in Live Activity mode (`config.liveActivity` true, or
+`msg.liveActivity === true` on the incoming message), the send path builds live-activity
+payloads instead of standard-notification payloads. Everything else about the send loop
+(fan-out, stagger, tracking, error handling) is shared.
+
+**Files:**
+- Modify: `ha-ios-notification.js`
+- Modify: `test/integration/ha-ios-notification.spec.js`
+
+**Interfaces:**
+- Consumes: `buildLiveActivityPayloads` (Task 19.3).
+- Produces: `handleSend` chooses the builder based on live-activity mode.
+
+- [ ] **Step 1: Append the failing test**
+
+```js
+// append to test/integration/ha-ios-notification.spec.js
+
+describe('live activity send', () => {
+  it('sends a live_update payload when the node is in Live Activity mode', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push(data); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'laundry',
+        liveActivity: true, progress: 40, progressMax: 100, actions: [], wires: [],
+      },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        calls.should.have.length(1);
+        calls[0].data.live_update.should.equal(true);
+        calls[0].data.progress.should.equal(40);
+        done();
+      }, 30);
+    });
+  });
+
+  it('sends a standard notification (no live_update) when not in Live Activity mode', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push(data); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'my_iphone' }], title: 'Hi', actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        calls[0].data.should.not.have.property('live_update');
+        done();
+      }, 30);
+    });
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx mocha test/integration/ha-ios-notification.spec.js`
+Expected: FAIL — `live_update` is never set; the standard builder always runs.
+
+- [ ] **Step 3: Extend `ha-ios-notification.js`**
+
+Add the require:
+
+```js
+const { buildLiveActivityPayloads } = require('./lib/build-live-activity');
+```
+
+At the top of `handleSend`, choose the builder based on mode (msg override wins over
+config):
+
+```js
+    const liveMode = msg.liveActivity !== undefined ? !!msg.liveActivity : node.nodeConfig.liveActivity;
+    const { error, payloads } = liveMode
+      ? buildLiveActivityPayloads(node.nodeConfig, msg.notificationOverride)
+      : buildNotificationPayloads(node.nodeConfig, msg.notificationOverride);
+```
+
+(Replace the existing single `buildNotificationPayloads(...)` destructuring at the top of
+`handleSend` with this conditional.)
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `npx mocha test/integration/ha-ios-notification.spec.js`
+Expected: PASS — 25 passing
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ha-ios-notification.js test/integration/ha-ios-notification.spec.js
+git commit -m "feat: Live Activity send-path branch"
+```
+
+---
+
+## Task 19.5: Two-instance isolation test [REV2 — NEW, REQUIRED]
+
+**[REV2]** The rewrite's central promise is that per-instance `node.context()` tracking
+never collides across multiple node instances in one flow (v2's global flow-context did).
+Rev-1 never tested this. This task adds the missing proof.
+
+**Files:**
+- Modify: `test/integration/ha-ios-notification.spec.js`
+
+**Interfaces:**
+- Consumes: two `ha-ios-notification` instances loaded in one test flow.
+
+- [ ] **Step 1: Append the failing/verifying test**
+
+```js
+// append to test/integration/ha-ios-notification.spec.js
+
+describe('multi-instance isolation', () => {
+  it('two node instances with the SAME tag do not react to each other\'s actions', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      // both instances use the same tag + same device, but only n1 actually sent.
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'shared',
+        actions: [{ title: 'Open' }], wires: [['h1']],
+      },
+      {
+        id: 'n2', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'shared',
+        actions: [{ title: 'Open' }], wires: [['h2']],
+      },
+      { id: 'h1', type: 'helper' },
+      { id: 'h2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const h1 = helper.getNode('h1');
+      const h2 = helper.getNode('h2');
+
+      // Only n1 sends — so only n1's context should own the SHARED tag.
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        let h1Got = false;
+        let h2Got = false;
+        h1.on('input', () => { h1Got = true; });
+        h2.on('input', () => { h2Got = true; });
+
+        // Both instances receive the same global action event (both are subscribed),
+        // but only n1 has a matching sentMessages entry, so only h1 should fire.
+        mock.emitFakeActionEvent({
+          event: { action: '1', action_data: { tag: 'SHARED', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] } },
+          context: { user_id: 'u' },
+        });
+
+        setTimeout(() => {
+          h1Got.should.equal(true);
+          h2Got.should.equal(false); // n2 never sent -> must not react
+          done();
+        }, 40);
+      }, 30);
+    });
+  });
+});
+```
+
+- [ ] **Step 2: Run the test**
+
+Run: `npx mocha test/integration/ha-ios-notification.spec.js`
+Expected: PASS — 26 passing. (If it FAILS with `h2Got === true`, the tracking store is
+leaking across instances — a Task 4 / Task 13 regression — fix before proceeding.)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add test/integration/ha-ios-notification.spec.js
+git commit -m "test: verify per-instance tracking isolation across two node instances"
+```
+
+---
+
 ## Task 20: Full test suite and lint pass
 
 **Files:**
 - No new files — verification-only task.
 
 **Interfaces:**
-- Consumes: everything from Tasks 1–19.
+- Consumes: everything from Tasks 1–19.5.
 - Produces: a green `npm test` and clean `npm run lint`, confirming the whole runtime + lib layer is internally consistent before editor UI work begins.
 
 - [ ] **Step 1: Run the full test suite**
 
 Run: `npm test`
-Expected: all unit + integration tests pass (67 total: 29 build-payload + 8 build-clear-payload + 7 sanitize-tag + 10 action-list + 8 message-store = 62 unit, plus 15 integration — reconcile the exact count against what actually accumulated across Tasks 2–19 and fix any test that regressed from a later task's refactor).
+Expected: all unit + integration tests pass. **[REV2] Target totals:** unit ≈ 84
+(sanitize-tag 7, action-list 13, message-store 8, build-payload 39, build-clear-payload
+8, build-live-activity 9); integration = 26. Grand total ≈ 110. Reconcile the exact
+count against what actually accumulated and fix any test that regressed from a later
+task's refactor. **[REV2] Timing note:** the two `staggerMs` timing tests (Task 18) use
+generous margins by design; all other integration tests assert on delivered messages via
+the `helper` nodes, not on timers. If any non-timing test proves flaky under CI load,
+convert its `setTimeout(..., 20)` wait into an `on('input')`/`done()` completion hook
+rather than lengthening the timeout.
 
 - [ ] **Step 2: Run the linter**
 
@@ -3373,6 +4517,162 @@ git commit -m "feat: add map/media/advanced editor sections and help text"
 
 ---
 
+## Task 24.5: Editor UI — REV2 fields (badge, presentation_options, tap-to-perform, Live Activity) [REV2 — NEW]
+
+**[REV2]** Adds editor fields/sections for the capabilities added in Tasks 8.5, 19.2,
+19.3/19.4. All the runtime already reads these config keys (Task 12 `normalizeNodeConfig`);
+this task only surfaces them in the editor. Every `<datalist>`-backed input degrades to
+free-text when HA is unreachable at edit time.
+
+**Files:**
+- Modify: `ha-ios-notification.html`
+
+**Interfaces:**
+- Consumes: admin endpoints `/ha-ios-notification/callable-services` and
+  `/ha-ios-notification/entities` (Task 19.2).
+- Produces: editor inputs writing config keys `badge`, `presentationOptions`,
+  per-action `targetService`/`targetEntityId`/`targetData`, `liveActivity` + its fields.
+
+- [ ] **Step 1: Add the new `defaults` entries**
+
+In the `RED.nodes.registerType('ha-ios-notification', { defaults: {...} })` object, add:
+
+```js
+      badge: { value: '' },
+      presentationOptions: { value: [] },
+      liveActivity: { value: false },
+      progress: { value: '' },
+      progressMax: { value: '' },
+      chronometer: { value: false },
+      when: { value: '' },
+      whenRelative: { value: false },
+      notificationIcon: { value: '' },
+      notificationIconColor: { value: '' },
+      color: { value: '' },
+      backgroundColor: { value: '' },
+      textColor: { value: '' },
+```
+
+- [ ] **Step 2: Add Badge + presentation_options to the Advanced template section**
+
+```html
+  <div class="form-row">
+    <label for="node-input-badge">Badge count (optional)</label>
+    <input type="number" id="node-input-badge" min="0" step="1">
+  </div>
+  <div class="form-row">
+    <label>Foreground presentation</label>
+    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="alert"> Alert</label>
+    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="badge"> Badge</label>
+    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="sound"> Sound</label>
+  </div>
+```
+
+In `oneditprepare`, check the boxes from the saved array; in `oneditsave`, collect them:
+
+```js
+      // oneditprepare
+      (node.presentationOptions || []).forEach((v) => {
+        $(`.presopt[value="${v}"]`).prop('checked', true);
+      });
+```
+```js
+      // oneditsave
+      this.presentationOptions = $('.presopt:checked').map(function () { return this.value; }).get();
+```
+
+- [ ] **Step 3: Add per-action tap-to-perform fields to the Actions editable list (extends Task 23)**
+
+In the Task 23 `addItem` callback, append a fourth row per action with a service picker
+and an entity input:
+
+```js
+          const row4 = $('<div style="display:flex; gap:8px; margin-top:4px;">').appendTo(container);
+          const svc = $('<input type="text" placeholder="Tap-to-perform service (optional, e.g. lock.unlock)" style="flex:2;" list="ha-ios-services">')
+            .val(data.targetService || '').appendTo(row4).addClass('action-targetService');
+          $('<input type="text" placeholder="Target entity (optional)" style="flex:2;" list="ha-ios-entities">')
+            .val(data.targetEntityId || '').appendTo(row4).addClass('action-targetEntityId');
+```
+
+Add two shared `<datalist>`s once in the template (outside the list), and populate them
+in `oneditprepare` from the endpoints:
+
+```html
+  <datalist id="ha-ios-services"></datalist>
+  <datalist id="ha-ios-entities"></datalist>
+```
+```js
+      function loadServiceAndEntityLists() {
+        const serverId = $('#node-input-server').val();
+        if (!serverId) return;
+        $.getJSON('ha-ios-notification/callable-services', { server: serverId }, function (r) {
+          const $l = $('#ha-ios-services').empty();
+          (r.services || []).forEach((s) => $l.append(`<option value="${s}">`));
+        });
+        $.getJSON('ha-ios-notification/entities', { server: serverId }, function (r) {
+          const $l = $('#ha-ios-entities').empty();
+          (r.entities || []).forEach((e) => $l.append(`<option value="${e}">`));
+        });
+      }
+      $('#node-input-server').on('change', loadServiceAndEntityLists);
+      setTimeout(loadServiceAndEntityLists, 100);
+```
+
+In the Task 23 `oneditsave` action collector, also read the tap-to-perform fields:
+
+```js
+        const targetService = $(this).find('.action-targetService').val();
+        if (targetService) action.targetService = targetService;
+        const targetEntityId = $(this).find('.action-targetEntityId').val();
+        if (targetEntityId) action.targetEntityId = targetEntityId;
+```
+
+- [ ] **Step 4: Add a Live Activity template section**
+
+```html
+  <h4>Live Activity (iOS 17.2+, HA Core 2026.7+)</h4>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-liveActivity" style="width:auto">
+    <label for="node-input-liveActivity" style="width:auto">Send as a Live Activity (live_update)</label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-progress">Progress / Max</label>
+    <input type="number" id="node-input-progress" style="width:45%" placeholder="progress">
+    <input type="number" id="node-input-progressMax" style="width:45%" placeholder="max">
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-chronometer" style="width:auto">
+    <label for="node-input-chronometer" style="width:auto">Chronometer</label>
+    <input type="number" id="node-input-when" placeholder="when (s)" style="width:30%; margin-left:8px;">
+    <input type="checkbox" id="node-input-whenRelative" style="width:auto; margin-left:8px;">
+    <label for="node-input-whenRelative" style="width:auto">relative</label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-notificationIcon">Icon / Icon color</label>
+    <input type="text" id="node-input-notificationIcon" style="width:45%" placeholder="mdi:washing-machine">
+    <input type="text" id="node-input-notificationIconColor" style="width:45%" placeholder="#2196F3">
+  </div>
+  <div class="form-row">
+    <label for="node-input-color">Accent / BG / Text color</label>
+    <input type="text" id="node-input-color" style="width:30%" placeholder="accent">
+    <input type="text" id="node-input-backgroundColor" style="width:30%" placeholder="bg">
+    <input type="text" id="node-input-textColor" style="width:30%" placeholder="text">
+  </div>
+```
+
+(`badge`, `progress`, `progressMax`, `when` are numeric text inputs; `normalizeNodeConfig`
+already coerces `''` → `undefined` and numeric strings → numbers, so no extra
+`oneditsave` handling is needed for them beyond Node-RED's automatic binding.)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ha-ios-notification.html
+git commit -m "feat: editor UI for badge, presentation_options, tap-to-perform, Live Activity"
+```
+
+---
+
 ## Task 25: CI workflow
 
 **Files:**
@@ -3463,7 +4763,16 @@ git commit -m "ci: add GitHub Actions workflow for tests, lint, and manifest val
 
 - [ ] **Step 1: Verify the current HA iOS Companion App bundled sound catalog**
 
-The legacy subflow's dropdown (in `legacy-subflow/actionable-notifications-subflow-for-ios.json`, the `customSoundPreInstalled` env var's `opts.opts` array) has ~90 entries. Per the design spec's decision, this is the iOS Companion App's own bundled sound library (not personal files), but it needs to be checked against the **current** app release rather than trusted as still-accurate, since it was captured 2025-02-07. Cross-reference against the Home Assistant iOS Companion App's current documentation/source (`companion-app` repo's bundled sound resources) before finalizing the list. If any sounds were added/removed since, update accordingly; if unable to verify a change, keep the legacy list as the known-good baseline rather than guessing.
+**[REV2] Confirmed:** these ARE the Companion App's bundled sounds (Morgan Freeman /
+Alexa / Daisy voice packs, 140+ `.wav` files) — verified against
+`https://companion.home-assistant.io/docs/notifications/notification-sounds`, which
+lists them as pre-installed. The legacy subflow's `customSoundPreInstalled` dropdown
+(in `legacy-subflow/...json`, the env var's `opts.opts` array) is a valid, shippable
+baseline. Cross-reference against that live docs page for any sounds added since the
+2025-02-07 capture, then finalize. Also document (in the README sound section): custom
+uploaded sounds must be **32-bit float 48000 Hz `.wav`**, and users may additionally
+reference imported iOS **system** sounds (`.caf`) — both are entered via the free-text
+`customSound` override, not the dropdown.
 
 - [ ] **Step 2: Replace the two-option placeholder in `ha-ios-notification.html`'s `customSoundPreInstalled` `<select>` with the verified full list**
 
@@ -3558,6 +4867,26 @@ No changes are needed to anything sending `msg.notificationOverride` into the
 old subflow, unless it overrides `actions` by `actionOutput` number — update
 those keys to match the new action `id`s.
 
+### Behavior changes from v2 to note
+
+- **Action event:** the node now listens for both `mobile_app_notification_action`
+  (current) and the legacy `ios.notification_action_fired` — no action needed, but
+  new setups are future-proof.
+- **Media keys:** the override URL and lazy flag now emit under
+  `data.attachment.url` / `data.attachment.lazy` (the documented structure) instead
+  of v2's top-level `data.contentUrl` / `data.lazy`. If you built payloads by hand
+  expecting the old keys, update them; via this node's config, it's automatic.
+- **Send stagger** defaults to **1000 ms** between per-device sends (v2 effectively
+  throttled ~5 s). Set "Stagger between sends" to `0` to disable, or raise it.
+- **Auto-clear sequencing delay:** v2 waited ~10 s before routing an action when
+  clear-on-action was set; this node routes immediately (no delay).
+
+### New capabilities beyond v2
+
+Badge (`push.badge`) + `clear_badge` command, `presentation_options`, tap-to-perform
+action targets (call an HA service on tap), and **Live Activities** (`live_update`
+mode) — see the in-editor help and the sections above.
+
 ## Configuration reference
 
 See the in-editor help panel (info tab) for the full field-by-field
@@ -3598,18 +4927,38 @@ Initial release of `node-red-contrib-ha-ios-notification`, replacing the
   fixed 10-output/10-JSON-field layout.
 - Per-node-instance state (`node.context()`) replacing global flow-context
   tracking — safe with multiple node instances in one flow.
-- Configurable per-device send stagger, replacing ad-hoc canvas delay nodes.
-- `node.error()` on Home Assistant call failures (v2 failed silently).
+- Dual action-event support: `mobile_app_notification_action` (current) +
+  legacy `ios.notification_action_fired`, normalized to `msg.actionId`.
+- Badge control: `data.push.badge` field and the `clear_badge` command
+  (`msg.clearBadge = true`).
+- `presentation_options` (foreground alert/badge/sound control).
+- Tap-to-perform: an action can call an HA service directly on tap
+  (`targetService` / `targetEntityId` / `targetData`).
+- Live Activities / Live Updates (`live_update` mode: progress, chronometer,
+  colors) — start/update by sending, end via the clear path with the same tag.
+- Configurable per-device send stagger (default 1000 ms), replacing v2's
+  ad-hoc canvas delay nodes.
+- `node.error()` on Home Assistant call failures (v2 failed silently), and
+  per-send tracking persistence so a mid-fan-out failure can't drop a
+  delivered device from state.
 - Automated test suite (Mocha unit tests + node-red-node-test-helper
-  integration tests).
+  integration tests), including a two-instance isolation test.
 
 ### Changed
 - Action override keys (`msg.notificationOverride.actions`) are now keyed by
-  a stable action `id` instead of a 1-10 `actionOutput` number. See the
-  README's migration section.
+  a stable action `id` instead of a 1-10 `actionOutput` number.
+- Media override URL / lazy flag emit under `data.attachment.*` (documented
+  structure) instead of top-level `data.contentUrl` / `data.lazy`; `content-type`
+  is newly exposed.
+- Action overrides fully replace an action slot (a prop absent from the
+  override is dropped), matching v2 exactly.
+- Send stagger defaults to 1000 ms (v2 ≈ 5 s always-on); set `0` to disable.
+- No pre-routing sequencing delay on auto-clear (v2 waited ~10 s).
+- See the README's migration section for all behavior changes.
 
 ### Unchanged (compatible with v2)
-- `msg.notificationOverride` three-tier override precedence.
+- `msg.notificationOverride` three-tier override precedence, including
+  explicit empty-string overrides (nullish semantics).
 - `msg.clear = true` manual clear behavior.
 - Auto-clear-on-action behavior.
 - User-info enrichment on action received.
@@ -3901,36 +5250,60 @@ Check https://flows.nodered.org/node/node-red-contrib-ha-ios-notification once a
 
 ## Self-Review
 
-**1. Spec coverage:**
+**1. Spec coverage (incl. Revision 2):**
 - Package layout, config schema, override compatibility → Tasks 1, 12.
 - Retained behaviors 1–7 (manual clear, auto-clear, ownership matching, user-info,
-  rate limiting, node.status, debugMode) → Tasks 14, 17, 15, 16, 18, all tasks'
-  `node.status()` calls, 19, respectively.
-- Error handling (new) → Tasks 13/14/16/17 (`node.error` in every catch block).
-- Editor UI (Basics/Targets/Actions/Map/Media/Advanced, pickers, help text) →
-  Tasks 21–24.
-- Local dev/debug workflow → covered in Task 27's `npm link` note folded into the
-  README's Development section (Task 26 Step 3) rather than a separate task, since
-  it's a few lines of documentation, not a code deliverable.
-- Testing (unit + integration) → Tasks 2–19 each carry their own tests; Task 20
-  verifies the whole suite together.
-- Documentation → Task 26.
-- Publishing plan (npm account, repo restructure, manifest, release) → Tasks 1
-  (restructure), 28 (account/publish/release).
-- Out-of-scope items (Android, auto-migration tooling, standalone HA client) —
-  correctly absent from every task; no task builds any of them.
+  rate limiting, node.status, debugMode) → Tasks 14, 17, 15, 16, 18, `node.status()`
+  throughout, 19.
+- **[REV2] Override nullish semantics** (explicit `''` honored) → Task 5 (`pickNullish`),
+  tested in Task 5.
+- **[REV2] Action override full-replace** → Task 3, tested there and in Task 6.
+- **[REV2] Auto-clear state cleanup** → Task 17.
+- **[REV2] Send-path persistence** → Tasks 13 + 18.
+- **[REV2] Dual action-event + normalization** → Tasks 11 + 15 (`normalizeActionId`),
+  tested in Task 15 (modern + legacy).
+- **[REV2] Media `data.attachment.*` placement + content-type** → Task 8.
+- **[REV2] Badge + presentation_options** → Task 8.5 (builder) + 24.5 (editor);
+  **clear_badge** → Task 19.1.
+- **[REV2] Tap-to-perform** → Task 3 (props) + 19.2 (runtime + endpoints) + 24.5 (editor).
+- **[REV2] Live Activities** → Task 19.3 (builder) + 19.4 (runtime) + 24.5 (editor).
+- **[REV2] Two-instance isolation test (required)** → Task 19.5.
+- **[REV2] Stagger default non-zero** → Tasks 12 + 18.
+- Editor UI → Tasks 21–24 (base) + 24.5 (REV2 fields).
+- Testing → Tasks 2–19.5 carry their own tests; Task 20 verifies the whole suite.
+- Documentation (incl. REV2 migration notes) → Task 26.
+- Publishing plan → Tasks 1 (restructure), 28 (account/publish/release).
+- Out-of-scope (Android, auto-migration tooling, standalone HA client) — no task
+  builds them.
 
-**2. Placeholder scan:** No "TBD"/"TODO" in any task. The two flagged
-verification items (rate-limit wiring intent, `homeAssistant.send()` return
-shape) are explicit, bounded manual-check notes with defensive code already
-written to handle either outcome — not vague requirements.
+**2. Placeholder scan:** No "TBD"/"TODO". Remaining flagged verification is one bounded
+item — the modern `mobile_app_notification_action` payload field mapping (`action` vs
+`actionName`), confirmed via docs but not a live event; the normalizer handles either
+shape, and Task 27's npm-link smoke test closes it. The `send()` return-shape question
+from Rev-1 is now resolved (bare array). The rate-limit-wiring question is resolved
+(Task 18 reproduces send-path throttle, consciously drops the clear-path throttle and
+the ~10 s sequencing delay with migration notes).
 
-**3. Type consistency:** Verified across tasks —
-`buildNotificationPayloads(config, override)` signature is identical everywhere
-it's called (Task 5 defines it, Task 13 calls it with `node.nodeConfig,
-msg.notificationOverride`). `messageStore.recordSent`/`findMatch`/`removeMatch`
-signatures from Task 4 match every call site in Tasks 13/14/15. `haClient.*`
-function names from Task 11 match every call site in Tasks 12–17, 21, 22
-exactly (no renamed variants). Action `id`/`outputIndex` fields from Task 3
-are consumed identically in Task 6 (`build-payload.js`) and Task 15
-(`handleActionReceived`'s output-index lookup).
+**3. Type consistency (re-verified after REV2 edits):**
+- `buildNotificationPayloads(config, override)` — signature identical at its Task 5/6
+  definition and its Task 13/19.4 call sites.
+- `buildLiveActivityPayloads(config, override)` — same return shape (`{error, payloads}`)
+  as `buildNotificationPayloads`, so Task 19.4's shared send loop consumes either.
+- `pick` (|| semantics, sound only) vs `pickNullish` (?? semantics, everything else) —
+  both defined and exported in `lib/build-payload.js`; `build-live-activity.js` defines
+  its own local `pickNullish`.
+- `action-list.js` exports `IOS_ACTION_PROPS` (emitted to iOS) and `TAP_TARGET_PROPS`
+  (node-side only); Task 6 imports and emits only `IOS_ACTION_PROPS`, so tap-to-perform
+  props never leak into the notification payload (tested in Task 6).
+- `messageStore.{recordSent,findMatch,removeMatch}` — call sites in Tasks 13/14/15/17
+  all match Task 4's signatures.
+- `haClient.*` — every name used in Tasks 12–19.5, 21, 22, 19.2 matches Task 11's
+  exports (`subscribeToActionEvents`, `callAction`, `getCallableServices`, `getEntities`,
+  etc.); no renamed variants.
+- `handleActionReceived` — Task 16 is the canonical rewrite (async, `actionId`,
+  `msg.actionId`); Tasks 17, 19, 19.2 append/modify against that exact version (verified:
+  the `outMsg` line they reference includes `actionId`).
+- **Integration-test counts** are cumulative in one spec file; the per-task "N passing"
+  values were re-tallied after REV2 additions (12→…→19 through Task 19; 21, 23, 25, 26
+  through Tasks 19.1–19.5). Task 20 states the authoritative totals (≈84 unit, 26
+  integration) and instructs reconciling against the live runner.

@@ -324,5 +324,11 @@ is dead code and can be dropped.
 
 ## Open decision resolved (2026-07-16)
 
-**Tap-to-perform action entity/service picker:** Steve to confirm implement-in-v1 vs
-defer. (Captured in the follow-up question after this revision.)
+**Tap-to-perform action entity/service picker — IN v1 (approved by Steve).** An action
+may optionally carry an HA target (entity_id + domain/service) that the node calls
+directly via `callService` when that action is received, in addition to emitting on
+the action's output. New per-action editor fields (service picker + entity picker),
+a new admin endpoint enumerating callable services, and a service-call step in the
+action-received handler (after ownership match, alongside user-info enrichment and
+auto-clear). The action's `uri`/other fields are unaffected; tap-to-perform is purely
+additive and skipped when no target is configured.
