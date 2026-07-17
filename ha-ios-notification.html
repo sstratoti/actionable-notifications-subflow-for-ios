@@ -288,16 +288,20 @@
       // Populate rows from existing config (backward-compatible services shape).
       (node.services || []).forEach((s) => $targetsList.editableList('addItem', { deviceName: s.deviceName }));
 
-      function loadCameraEntities() {
-        const serverId = $('#node-input-server').val();
+      var haCameraOptions = [];
+      function haLoadCameras() {
+        var serverId = $('#node-input-server').val();
         if (!serverId) return;
-        $.getJSON('ha-ios-notification/camera-entities', { server: serverId }, function (result) {
-          const $list = $('#node-input-cameraEntity-list').empty();
-          (result.entities || []).forEach((id) => $list.append(`<option value="${id}">`));
+        $.getJSON('ha-ios-notification/camera-entities', { server: serverId }, function (r) {
+          haCameraOptions = (r.entities || []).map(function (e) { return { label: e, value: e }; });
         });
       }
-      $('#node-input-server').on('change', loadCameraEntities);
-      setTimeout(loadCameraEntities, 100);
+      haCombo($('#node-input-cameraEntity'), function (term) {
+        var t = term.toLowerCase();
+        return haCameraOptions.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
+      });
+      $('#node-input-server').on('change', haLoadCameras);
+      setTimeout(haLoadCameras, 100);
 
       const $actionsList = $('#node-input-actions-container').editableList({
         addItem: function (container, index, data) {
@@ -404,31 +408,20 @@
       <span class="ha-s-sub">title, message, tag</span>
     </div>
     <div class="ha-section-body">
-  <div class="form-row">
-    <label for="node-input-title">Title</label>
-    <input type="text" id="node-input-title">
-  </div>
-  <div class="form-row">
-    <label for="node-input-subtitle">Subtitle</label>
-    <input type="text" id="node-input-subtitle">
-  </div>
-  <div class="form-row">
-    <label for="node-input-message">Message</label>
-    <input type="text" id="node-input-message">
-  </div>
-  <div class="form-row">
-    <label for="node-input-group">Group</label>
-    <input type="text" id="node-input-group">
-  </div>
-  <div class="form-row">
-    <label for="node-input-tag">Tag (optional)</label>
-    <input type="text" id="node-input-tag">
-  </div>
-  <div class="form-row">
-    <label for="node-input-notificationUrl">Notification URL (optional)</label>
-    <input type="text" id="node-input-notificationUrl">
-  </div>
-
+      <div class="ha-grid">
+        <label for="node-input-title">Title</label>
+        <input type="text" id="node-input-title" placeholder="e.g. Front Door">
+        <label for="node-input-subtitle">Subtitle</label>
+        <input type="text" id="node-input-subtitle" placeholder="e.g. Ring camera">
+        <label for="node-input-message">Message</label>
+        <input type="text" id="node-input-message" placeholder="e.g. Someone is at the door">
+        <label for="node-input-group">Group</label>
+        <input type="text" id="node-input-group" placeholder="e.g. doorbell (stacks like notifications)">
+        <label for="node-input-tag">Tag</label>
+        <input type="text" id="node-input-tag" placeholder="auto-generated if left blank">
+        <label for="node-input-notificationUrl">Notification URL</label>
+        <input type="text" id="node-input-notificationUrl" placeholder="/lovelace/cameras or https://…">
+      </div>
   </div></div>
   <div class="ha-section" id="ha-sec-targets">
     <div class="ha-section-head" onclick="window.__haToggle(this)">
@@ -443,12 +436,14 @@
     </div>
     <ol id="node-input-services-container"></ol>
   </div>
-  <div class="form-row">
-    <label for="node-input-cameraEntity">Camera Entity (optional)</label>
-    <input type="text" id="node-input-cameraEntity" list="node-input-cameraEntity-list" placeholder="camera.front_door">
-    <datalist id="node-input-cameraEntity-list"></datalist>
-  </div>
-
+  <div class="ha-divider"></div>
+      <div class="ha-grid">
+        <label for="node-input-cameraEntity">Camera entity</label>
+        <div class="ha-control ha-with-caret">
+          <input type="text" id="node-input-cameraEntity" class="ha-mono" placeholder="camera.front_door">
+          <span class="ha-caret">&#9660;</span>
+        </div>
+      </div>
   </div></div>
   <div class="ha-section" id="ha-sec-actions">
     <div class="ha-section-head" onclick="window.__haToggle(this)">
