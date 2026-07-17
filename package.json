@@ -26,6 +26,14 @@
       "ha-ios-notification": "ha-ios-notification.js"
     }
   },
+  "files": [
+    "ha-ios-notification.js",
+    "ha-ios-notification.html",
+    "lib/",
+    "examples/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "peerDependencies": {
     "node-red-contrib-home-assistant-websocket": ">=0.70.0"
   },
