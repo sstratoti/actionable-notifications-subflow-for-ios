@@ -136,3 +136,91 @@ describe('build-payload: base fields and fan-out', () => {
     push['interruption-level'].should.equal('critical');
   });
 });
+
+describe('build-payload: actions', () => {
+  it('omits actions and action_data entirely when no actions are configured', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {});
+    payloads[0].payload.data.data.should.not.have.property('actions');
+    payloads[0].payload.data.data.should.not.have.property('action_data');
+  });
+
+  it('includes one entry per configured action, in order', () => {
+    const config = baseConfig({ actions: [{ title: 'Open' }, { title: 'Ignore' }] });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const actions = payloads[0].payload.data.data.actions;
+    actions.should.have.length(2);
+    actions[0].action.should.equal('1');
+    actions[0].title.should.equal('Open');
+    actions[1].action.should.equal('2');
+    actions[1].title.should.equal('Ignore');
+  });
+
+  it('carries optional action properties through when set', () => {
+    const config = baseConfig({
+      actions: [{ title: 'Open', destructive: true, uri: '/open', activationMode: 'background' }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const action = payloads[0].payload.data.data.actions[0];
+    action.destructive.should.equal(true);
+    action.uri.should.equal('/open');
+    action.activationMode.should.equal('background');
+  });
+
+  it('attaches the sending service to each action', () => {
+    const config = baseConfig({
+      services: [{ deviceName: 'my_iphone' }],
+      actions: [{ title: 'Open' }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.actions[0].service.deviceName.should.equal('my_iphone');
+  });
+
+  it('populates action_data with tag, deviceName, and allServices when actions are present', () => {
+    const config = baseConfig({
+      tag: 'front-door',
+      services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
+      actions: [{ title: 'Open' }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const actionData = payloads[0].payload.data.data.action_data;
+    actionData.tag.should.equal('FRONT_DOOR');
+    actionData.deviceName.should.equal('my_iphone');
+    actionData.allServices.should.eql(config.services);
+  });
+
+  it('carries populateUserInfo and clearNotificationsOnAction into action_data', () => {
+    const config = baseConfig({
+      actions: [{ title: 'Open' }],
+      userInfo: true,
+      isClearNotificationsOnAction: true,
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const actionData = payloads[0].payload.data.data.action_data;
+    actionData.populateUserInfo.should.equal(true);
+    actionData.clearNotificationsOnAction.should.equal(true);
+  });
+
+  it('a global override action (keyed by id) replaces a configured action, service-level override wins over global', () => {
+    const config = baseConfig({
+      services: [{
+        deviceName: 'my_iphone',
+        serviceOverride: { actions: { 1: { title: 'Service Wins' } } },
+      }],
+      actions: [{ title: 'Configured Title' }],
+    });
+    const override = { actions: { 1: { title: 'Global Override' } } };
+    const { payloads } = buildNotificationPayloads(config, override);
+    payloads[0].payload.data.data.actions[0].title.should.equal('Service Wins');
+  });
+
+  it('[REV2] does NOT emit tap-to-perform target props into the iOS action payload', () => {
+    const config = baseConfig({
+      actions: [{ title: 'Unlock', targetService: 'lock.unlock', targetEntityId: 'lock.front_door' }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const action = payloads[0].payload.data.data.actions[0];
+    action.title.should.equal('Unlock');
+    action.should.not.have.property('targetService');
+    action.should.not.have.property('targetEntityId');
+  });
+});
