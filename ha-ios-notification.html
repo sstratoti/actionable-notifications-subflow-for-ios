@@ -1,13 +1,101 @@
 <!-- ha-ios-notification.html -->
+<script src="resources/node-red-contrib-ha-ios-notification/sound-field.js"></script>
 <style>
-  /* Keep the device-picker autocomplete dropdown above the Node-RED edit tray. */
+  /* Autocomplete dropdown above the Node-RED edit tray. */
   .ui-autocomplete.ui-menu { z-index: 10000 !important; }
+
+  /* ---- collapsible section card ---- */
+  .ha-section {
+    border: 1px solid var(--red-ui-secondary-border-color, #d5d5da);
+    border-radius: 4px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .ha-section-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; cursor: pointer; user-select: none;
+    background: var(--red-ui-tertiary-background, #f3f3f3);
+    color: var(--red-ui-primary-text-color, #444);
+  }
+  .ha-section.ha-open > .ha-section-head { border-bottom: 1px solid var(--red-ui-secondary-border-color, #d5d5da); }
+  .ha-section-head .ha-chev {
+    transition: transform 0.15s ease; font-size: 11px; width: 11px; flex: none;
+    color: var(--red-ui-secondary-text-color, #888);
+  }
+  .ha-section.ha-open > .ha-section-head .ha-chev { transform: rotate(90deg); }
+  .ha-section-head .ha-s-title { font-weight: 600; }
+  .ha-section-head .ha-s-sub { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; }
+  .ha-section-head .ha-s-count {
+    margin-left: auto; font-size: 11px; color: var(--red-ui-secondary-text-color, #888);
+    background: var(--red-ui-secondary-background, #fff); border-radius: 10px; padding: 0 8px;
+    border: 1px solid var(--red-ui-secondary-border-color, #d5d5da);
+  }
+  .ha-section-body { padding: 10px; display: none; background: var(--red-ui-secondary-background, transparent); }
+  .ha-section.ha-open > .ha-section-body { display: block; }
+  .ha-note { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; margin: 0 0 9px; }
+
+  /* ---- aligned label/control grid ---- */
+  .ha-grid { display: grid; grid-template-columns: 110px 1fr; gap: 8px 10px; align-items: center; }
+  .ha-grid.ha-align-start { align-items: start; }
+  .ha-grid > label { margin: 0; color: var(--red-ui-primary-text-color, #444); }
+  .ha-grid > .ha-control { min-width: 0; }
+  .ha-grid input[type="text"], .ha-grid input[type="number"], .ha-grid select, .ha-control input, .ha-control select {
+    width: 100%; box-sizing: border-box;
+  }
+
+  /* paired / triple sub-grids that align under the control column */
+  .ha-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ha-triple { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .ha-sub { display: flex; flex-direction: column; gap: 2px; }
+  .ha-sub small { color: var(--red-ui-secondary-text-color, #888); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  /* tidy 2-col checkbox grid */
+  .ha-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+  .ha-check { display: flex; align-items: center; gap: 7px; margin: 0; font-weight: normal; }
+  .ha-check input { width: auto !important; margin: 0; flex: none; }
+  .ha-hint { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; margin-top: 5px; }
+  .ha-divider { height: 1px; background: var(--red-ui-secondary-border-color, #e4e4e9); margin: 11px 0; border: 0; }
+
+  /* combo caret affordance */
+  .ha-with-caret { position: relative; }
+  .ha-with-caret input { padding-right: 22px; }
+  .ha-caret { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 9px; pointer-events: none; color: var(--red-ui-secondary-text-color, #888); }
+
+  /* mono for technical values (device names / entity ids) */
+  .ha-mono { font-family: var(--red-ui-monospace-font, monospace); font-size: 12px; }
+
+  /* device picker rows (already present feature, restyled to match) */
+  .ha-target-hint { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; }
+  .ha-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; flex: none; }
+  .ha-chip-ios { color: #1a6dff; background: rgba(74,144,255,0.14); }
+
+  /* segmented foreground control (multi-select) */
+  .ha-seg { display: inline-flex; border: 1px solid var(--red-ui-form-input-border-color, #ccc); border-radius: 5px; overflow: hidden; }
+  .ha-seg .ha-seg-btn {
+    font: inherit; font-size: 13px; padding: 5px 14px; cursor: pointer; border: 0;
+    border-right: 1px solid var(--red-ui-form-input-border-color, #ccc);
+    background: var(--red-ui-form-input-background, #fff);
+    color: var(--red-ui-secondary-text-color, #888);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ha-seg .ha-seg-btn:last-child { border-right: 0; }
+  .ha-seg .ha-seg-btn[aria-pressed="true"] {
+    background: var(--red-ui-secondary-background-selected, rgba(120,120,120,0.12));
+    color: var(--red-ui-primary-text-color, #333); font-weight: 600;
+  }
+  .ha-seg .ha-seg-check { width: 11px; text-align: center; }
+
+  /* action cards */
+  .ha-action-card { border: 1px solid var(--red-ui-form-input-border-color, #ccc); border-radius: 5px; margin-bottom: 8px; overflow: hidden; }
+  .ha-action-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--red-ui-tertiary-background, #f3f3f3); }
+  .ha-action-num { min-width: 18px; height: 18px; border-radius: 3px; background: var(--red-ui-secondary-background, #fff); border: 1px solid var(--red-ui-secondary-border-color, #d5d5da); font-size: 11px; font-weight: 700; display: grid; place-items: center; flex: none; }
+  .ha-action-preview { font-weight: 600; color: var(--red-ui-primary-text-color, #333); }
+  .ha-action-body { padding: 9px; display: flex; flex-direction: column; gap: 8px; }
+  .ha-tap { border-top: 1px dashed var(--red-ui-secondary-border-color, #e4e4e9); padding-top: 8px; }
+  .ha-tap-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--red-ui-secondary-text-color, #888); margin-bottom: 5px; }
 </style>
 <script type="text/javascript">
-  RED.nodes.registerType('ha-ios-notification', {
-    category: 'home_assistant',
-    color: '#C7E9C0',
-    defaults: {
+  var haDefaults = {
       name: { value: '' },
       server: { value: '', type: 'server', required: true },
       tag: { value: '' },
@@ -56,7 +144,12 @@
       color: { value: '' },
       backgroundColor: { value: '' },
       textColor: { value: '' },
-    },
+    };
+
+  RED.nodes.registerType('ha-ios-notification', {
+    category: 'home_assistant',
+    color: '#C7E9C0',
+    defaults: haDefaults,
     inputs: 1,
     outputs: 0,
     icon: 'font-awesome/fa-mobile-phone',
@@ -66,6 +159,53 @@
     },
     oneditprepare: function () {
       const node = this;
+
+      // ---- reusable type-to-search combo (free-type always allowed) ----
+      function haCombo($input, sourceFn) {
+        $input.autocomplete({
+          minLength: 0,
+          delay: 0,
+          source: function (request, response) { response(sourceFn(request.term || '')); },
+          select: function (event, ui) { $input.val(ui.item.value); $input.trigger('change'); return false; },
+          focus: function () { return false; },
+        });
+        $input.on('focus', function () { $(this).autocomplete('search', ''); });
+      }
+
+      function toggle(head) { $(head).parent().toggleClass('ha-open'); }
+      window.__haToggle = toggle; // section headers call window.__haToggle(this)
+
+      // ---- smart default-open ----
+      var HA_SECTION_FIELDS = {
+        map: ['firstLatitude','firstLongitude','secondLatitude','secondLongitude','showLineBetweenPoints','showCompass','showPointsOfInterest','showScale','showTraffic','showUserLocation'],
+        media: ['imagePath','videoPath','audioPath','contentUrl','contentType','lazyLoading','hideThumbnail'],
+        liveactivity: ['liveActivity','progress','progressMax','chronometer','when','whenRelative','notificationIcon','notificationIconColor','color','backgroundColor','textColor'],
+      };
+      function haFieldIsNonDefault(field) {
+        var cur = node[field];
+        if (field === 'staggerMs') { return !(cur === undefined || cur === '' || Number(cur) === 1000); }
+        if (field === 'presentationOptions') { return Array.isArray(cur) && cur.length > 0; }
+        if (Array.isArray(cur)) return cur.length > 0;
+        var def = haDefaults[field] ? haDefaults[field].value : undefined;
+        return (cur !== undefined && cur !== null && cur !== '' && cur !== def);
+      }
+      function haSectionHasContent(key) {
+        if (key === 'actions') return Array.isArray(node.actions) && node.actions.length > 0;
+        if (key === 'advanced') {
+          var resolved = window.haIosSoundField.soundFieldValue(node.customSound, node.customSoundPreInstalled);
+          if (resolved !== 'default') return true;
+          return ['interruptionLevel','userInfo','isClearNotificationsOnAction','staggerMs','debugMode','badge','presentationOptions']
+            .some(haFieldIsNonDefault);
+        }
+        return (HA_SECTION_FIELDS[key] || []).some(haFieldIsNonDefault);
+      }
+      function haApplySmartOpen() {
+        $('#ha-sec-basics, #ha-sec-targets').addClass('ha-open');
+        ['actions','map','media','advanced','liveactivity'].forEach(function (key) {
+          if (haSectionHasContent(key)) $('#ha-sec-' + key).addClass('ha-open');
+        });
+      }
+
       // Classified companion-app notify targets, cached for the autocomplete
       // source. Each: { deviceName: 'mobile_app_<slug>', label, platform }.
       let targetOptions = [];
@@ -207,6 +347,8 @@
       (node.presentationOptions || []).forEach((v) => {
         $(`.presopt[value="${v}"]`).prop('checked', true);
       });
+
+      haApplySmartOpen();
     },
     oneditsave: function () {
       const services = [];
@@ -256,7 +398,12 @@
     <input type="text" id="node-input-server">
   </div>
 
-  <h4>Basics</h4>
+  <div class="ha-section" id="ha-sec-basics">
+    <div class="ha-section-head" onclick="window.__haToggle(this)">
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Basics</span>
+      <span class="ha-s-sub">title, message, tag</span>
+    </div>
+    <div class="ha-section-body">
   <div class="form-row">
     <label for="node-input-title">Title</label>
     <input type="text" id="node-input-title">
@@ -282,7 +429,13 @@
     <input type="text" id="node-input-notificationUrl">
   </div>
 
-  <h4>Targets</h4>
+  </div></div>
+  <div class="ha-section" id="ha-sec-targets">
+    <div class="ha-section-head" onclick="window.__haToggle(this)">
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Targets</span>
+      <span class="ha-s-sub">where it goes</span>
+    </div>
+    <div class="ha-section-body">
   <div class="form-row" style="margin-bottom:0;">
     <label style="width:auto;">Notify Devices</label>
     <div style="color:#888; font-size:0.85em; margin:2px 0 6px 0;">
@@ -296,7 +449,13 @@
     <datalist id="node-input-cameraEntity-list"></datalist>
   </div>
 
-  <h4>Actions</h4>
+  </div></div>
+  <div class="ha-section" id="ha-sec-actions">
+    <div class="ha-section-head" onclick="window.__haToggle(this)">
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Actions</span>
+      <span class="ha-s-sub">buttons + tap-to-perform</span>
+    </div>
+    <div class="ha-section-body">
   <div class="form-row">
     <label>Actionable Buttons</label>
     <ol id="node-input-actions-container"></ol>
@@ -304,7 +463,13 @@
   <datalist id="ha-ios-services"></datalist>
   <datalist id="ha-ios-entities"></datalist>
 
-  <h4>Map</h4>
+  </div></div>
+  <div class="ha-section" id="ha-sec-map">
+    <div class="ha-section-head" onclick="window.__haToggle(this)">
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Map</span>
+      <span class="ha-s-sub">location pins</span>
+    </div>
+    <div class="ha-section-body">
   <div class="form-row">
     <label for="node-input-firstLatitude">Latitude / Longitude (Pin 1)</label>
     <input type="text" id="node-input-firstLatitude" style="width:45%" placeholder="lat">
@@ -334,7 +499,13 @@
     <label for="node-input-showUserLocation" style="width:auto">User location</label>
   </div>
 
-  <h4>Media</h4>
+  </div></div>
+  <div class="ha-section" id="ha-sec-media">
+    <div class="ha-section-head" onclick="window.__haToggle(this)">
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Media</span>
+      <span class="ha-s-sub">image · video · audio</span>
+    </div>
+    <div class="ha-section-body">
   <div class="form-row">
     <label for="node-input-imagePath">Image Path (10MB limit)</label>
     <input type="text" id="node-input-imagePath">
@@ -362,7 +533,13 @@
     <label for="node-input-hideThumbnail" style="width:auto">Hide thumbnail</label>
   </div>
 
-  <h4>Advanced</h4>
+  </div></div>
+  <div class="ha-section" id="ha-sec-advanced">
+    <div class="ha-section-head" onclick="window.__haToggle(this)">
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Advanced</span>
+      <span class="ha-s-sub">sound, delivery, badge</span>
+    </div>
+    <div class="ha-section-body">
   <div class="form-row">
     <label for="node-input-customSoundPreInstalled">Sound (bundled)</label>
     <select id="node-input-customSoundPreInstalled">
@@ -537,7 +714,13 @@
     <label style="font-weight:normal"><input type="checkbox" class="presopt" value="sound"> Sound</label>
   </div>
 
-  <h4>Live Activity (iOS 17.2+, HA Core 2026.7+)</h4>
+  </div></div>
+  <div class="ha-section" id="ha-sec-liveactivity">
+    <div class="ha-section-head" onclick="window.__haToggle(this)">
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Live Activity</span>
+      <span class="ha-s-sub">iOS 17.2+ · HA Core 2026.7+</span>
+    </div>
+    <div class="ha-section-body">
   <div class="form-row">
     <input type="checkbox" id="node-input-liveActivity" style="width:auto">
     <label for="node-input-liveActivity" style="width:auto">Send as a Live Activity (live_update)</label>
@@ -565,6 +748,7 @@
     <input type="text" id="node-input-backgroundColor" style="width:30%" placeholder="bg">
     <input type="text" id="node-input-textColor" style="width:30%" placeholder="text">
   </div>
+  </div></div>
 </script>
 
 <script type="text/html" data-help-name="ha-ios-notification">
