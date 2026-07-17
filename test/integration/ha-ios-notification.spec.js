@@ -818,3 +818,57 @@ describe('tap-to-perform', () => {
     });
   });
 });
+
+describe('live activity send', () => {
+  // [DEVIATION from task-19.4-brief.md] The brief's literal test text has no afterEach
+  // hook in this describe block. Without it, helper.load()'s reuse of node id 'n1'
+  // across tests in this file hangs the second test to the mocha timeout (same issue
+  // documented in the sibling `describe('send path', ...)` block above).
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('sends a live_update payload when the node is in Live Activity mode', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push(data); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'laundry',
+        liveActivity: true, progress: 40, progressMax: 100, actions: [], wires: [],
+      },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        calls.should.have.length(1);
+        calls[0].data.live_update.should.equal(true);
+        calls[0].data.progress.should.equal(40);
+        done();
+      }, 30);
+    });
+  });
+
+  it('sends a standard notification (no live_update) when not in Live Activity mode', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push(data); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'my_iphone' }], title: 'Hi', actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        calls[0].data.should.not.have.property('live_update');
+        done();
+      }, 30);
+    });
+  });
+});

@@ -3,6 +3,7 @@
 
 const haClient = require('./lib/ha-client');
 const { buildNotificationPayloads } = require('./lib/build-payload');
+const { buildLiveActivityPayloads } = require('./lib/build-live-activity');
 const { buildManualClearPayloads, buildAutoClearPayloads } = require('./lib/build-clear-payload');
 const messageStore = require('./lib/message-store');
 const { findMatch } = require('./lib/message-store');
@@ -111,7 +112,12 @@ module.exports = function (RED) {
   }
 
   async function handleSend(node, msg, send, done) {
-    const { error, payloads } = buildNotificationPayloads(node.nodeConfig, msg.notificationOverride);
+    // [REV2] Live Activity mode: msg.liveActivity, when explicitly set, overrides
+    // node.nodeConfig.liveActivity (see Task 19.4).
+    const liveMode = msg.liveActivity !== undefined ? !!msg.liveActivity : node.nodeConfig.liveActivity;
+    const { error, payloads } = liveMode
+      ? buildLiveActivityPayloads(node.nodeConfig, msg.notificationOverride)
+      : buildNotificationPayloads(node.nodeConfig, msg.notificationOverride);
 
     if (error) {
       node.status({ text: error, shape: 'ring', fill: 'red' });
