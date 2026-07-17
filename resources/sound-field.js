@@ -1,3 +1,4 @@
+/* eslint-env browser */
 // Single-sourced across the runtime/editor boundary: CommonJS for the Mocha
 // test, and window.haIosSoundField for the Node-RED editor (which loads this
 // file via <script src="resources/node-red-contrib-ha-ios-notification/sound-field.js">).

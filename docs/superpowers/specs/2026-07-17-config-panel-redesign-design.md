@@ -360,3 +360,16 @@ unchanged (it does not touch the `.html`).
 - Adding a `targetData` editor input (a separate, previously-noted gap — not
   part of this redesign).
 - The bundled-sound catalog contents (already verified in the node's own spec).
+
+## Manual verification (run at deploy)
+
+In a live Node-RED editor with the HA server configured:
+
+1. **Open an existing (pre-redesign) node.** Basics + Targets open; any section with real values auto-opens (e.g. Actions if it has buttons, Advanced if a non-default sound/badge). Sections with no content stay collapsed. No section wrongly opens for a `staggerMs` of 1000/blank.
+2. **Sound field** shows the node's current sound resolved into one box; the dropdown lists bundled sounds and filters as you type; a typed custom filename is accepted; clearing it and saving yields the default sound.
+3. **Foreground presentation** shows the saved options as checked segments; toggling one doesn't change the others; each active segment shows a check.
+4. **Tap-to-perform:** picking a service (e.g. `lock.unlock`) makes the entity field suggest only `lock.*`; free-typing any entity still works.
+5. **Camera + content-type** combos suggest and free-type.
+6. **Alignment:** every field's control edge lines up down each section; paired fields (lat/long, progress/max, colors) align under the control column.
+7. **Save with no changes, then check the flow diff:** only expected churn — `customSound`/`customSoundPreInstalled` rewrite and `presentationOptions` fixed ordering. Re-open: config is identical in meaning; send a test notification and confirm the same sound/behavior as before.
+8. **Theme:** confirm it reads correctly in the midnight-red dark theme and a light theme (colors come from `--red-ui-*`).
