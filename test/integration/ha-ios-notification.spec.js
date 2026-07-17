@@ -110,3 +110,61 @@ describe('send path', () => {
     });
   });
 });
+
+describe('manual clear path', () => {
+  // [DEVIATION from task-14-brief.md] Same reason as the sibling `describe('send
+  // path', ...)` block above: node-red-node-test-helper reuses node id 'n1'
+  // across tests in this file, and without unloading between tests the next
+  // helper.load() never fires its ready callback (verified pattern, established
+  // in Task 13).
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('sends clear_notification to every configured service when msg.clear is true', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push({ service, data }); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'a' }, { deviceName: 'b' }], tag: 'front-door', actions: [], wires: [],
+      },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ clear: true });
+      setTimeout(() => {
+        calls.should.have.length(2);
+        calls[0].data.message.should.equal('clear_notification');
+        calls[0].data.data.tag.should.equal('FRONT_DOOR');
+        done();
+      }, 20);
+    });
+  });
+
+  it('removes the matching tracked entry from sentMessages on manual clear', function (done) {
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'a' }], tag: 'front-door', actions: [], wires: [],
+      },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} }); // send first, so there's something to clear
+      setTimeout(() => {
+        n1.receive({ clear: true });
+        setTimeout(() => {
+          const stored = n1.context().get('sentMessages') || [];
+          stored.should.have.length(0);
+          done();
+        }, 20);
+      }, 20);
+    });
+  });
+});

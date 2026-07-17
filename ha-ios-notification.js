@@ -3,6 +3,7 @@
 
 const haClient = require('./lib/ha-client');
 const { buildNotificationPayloads } = require('./lib/build-payload');
+const { buildManualClearPayloads } = require('./lib/build-clear-payload');
 const messageStore = require('./lib/message-store');
 
 module.exports = function (RED) {
@@ -76,7 +77,7 @@ module.exports = function (RED) {
       done = done || function (err) { if (err) node.error(err, msg); };
 
       if (msg.clear) {
-        done(); // manual clear path implemented in Task 14
+        handleManualClear(node, msg, send, done);
         return;
       }
 
@@ -111,6 +112,32 @@ module.exports = function (RED) {
       }
 
       node.status({ text: `sent to ${payloads.length} service(s)`, shape: 'dot', fill: 'green' });
+      done();
+    } catch (err) {
+      node.error(err, msg);
+      done(err);
+    }
+  }
+
+  async function handleManualClear(node, msg, send, done) {
+    const { error, payloads } = buildManualClearPayloads(node.nodeConfig, msg.notificationOverride);
+
+    if (error) {
+      node.status({ text: error, shape: 'ring', fill: 'red' });
+      done();
+      return;
+    }
+
+    try {
+      let stored = node.context().get('sentMessages') || [];
+
+      for (const item of payloads) {
+        await haClient.sendNotification(node.homeAssistant, item.service.deviceName, item.payload.data);
+        stored = messageStore.removeMatch(stored, item.tag, item.service.deviceName);
+      }
+
+      node.context().set('sentMessages', stored);
+      node.status({ text: `cleared ${payloads.length} notification(s)`, shape: 'dot', fill: 'blue' });
       done();
     } catch (err) {
       node.error(err, msg);
