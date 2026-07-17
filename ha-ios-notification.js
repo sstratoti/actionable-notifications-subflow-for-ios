@@ -257,6 +257,24 @@ module.exports = function (RED) {
     node.status({ text: `action ${actionId} received`, shape: 'dot', fill: 'green' });
     node.send(outputs);
 
+    // [REV2] Tap-to-perform: call the HA service configured on the matched action
+    // (raw node.actions config, not the outbound payload) in addition to emitting
+    // on its output. targetService/targetEntityId/targetData never touch outMsg.
+    const matchedAction = node.actions[actionIndex];
+    if (matchedAction && matchedAction.targetService) {
+      const dot = String(matchedAction.targetService).indexOf('.');
+      const domain = dot > 0 ? matchedAction.targetService.slice(0, dot) : '';
+      const service = dot > 0 ? matchedAction.targetService.slice(dot + 1) : '';
+      if (domain && service) {
+        try {
+          const target = matchedAction.targetEntityId ? { entity_id: matchedAction.targetEntityId } : undefined;
+          await haClient.callAction(node.homeAssistant, domain, service, matchedAction.targetData || {}, target);
+        } catch (err) {
+          node.error(err);
+        }
+      }
+    }
+
     if (eventPayload.action_data.clearNotificationsOnAction) {
       try {
         const { payloads: clearPayloads } = buildAutoClearPayloads(eventPayload.action_data);
@@ -282,6 +300,27 @@ module.exports = function (RED) {
     }
     node.context().set('sentMessages', after);
   }
+
+  // [REV2] Admin endpoints backing the editor's tap-to-perform pickers (Task 24.5).
+  RED.httpAdmin.get('/ha-ios-notification/callable-services', RED.auth.needsPermission('flows.write'), function (req, res) {
+    const serverNode = RED.nodes.getNode(req.query.server);
+    if (!serverNode) { res.json({ services: [] }); return; }
+    try {
+      res.json({ services: haClient.getCallableServices(haClient.connect(serverNode)) });
+    } catch (err) {
+      res.json({ services: [] });
+    }
+  });
+
+  RED.httpAdmin.get('/ha-ios-notification/entities', RED.auth.needsPermission('flows.write'), function (req, res) {
+    const serverNode = RED.nodes.getNode(req.query.server);
+    if (!serverNode) { res.json({ entities: [] }); return; }
+    try {
+      res.json({ entities: haClient.getEntities(haClient.connect(serverNode), req.query.prefix) });
+    } catch (err) {
+      res.json({ entities: [] });
+    }
+  });
 
   RED.nodes.registerType('ha-ios-notification', HaIosNotificationNode);
 };

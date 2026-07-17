@@ -745,3 +745,76 @@ describe('clear_badge command', () => {
     });
   });
 });
+
+describe('tap-to-perform', () => {
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('calls the configured HA service when the matched action has a targetService', function (done) {
+    const calls = [];
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data, target) => { calls.push({ domain, service, data, target }); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Unlock', targetService: 'lock.unlock', targetEntityId: 'lock.front_door' }],
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        mock.emitFakeActionEvent({
+          event: {
+            action: '1',
+            action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+          },
+          context: { user_id: 'user-123' },
+        });
+        setTimeout(() => {
+          const lockCall = calls.find((c) => c.domain === 'lock' && c.service === 'unlock');
+          lockCall.should.be.ok();
+          lockCall.target.should.eql({ entity_id: 'lock.front_door' });
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
+
+  it('does not call any service when the matched action has no targetService', function (done) {
+    const calls = [];
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service) => { calls.push(`${domain}.${service}`); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        calls.length = 0; // ignore the initial notify send
+        mock.emitFakeActionEvent({
+          event: { action: '1', action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] } },
+          context: { user_id: 'u' },
+        });
+        setTimeout(() => {
+          calls.should.have.length(0);
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
+});
