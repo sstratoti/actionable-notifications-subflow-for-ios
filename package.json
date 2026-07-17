@@ -30,6 +30,7 @@
     "ha-ios-notification.js",
     "ha-ios-notification.html",
     "lib/",
+    "resources/",
     "examples/",
     "README.md",
     "CHANGELOG.md"
