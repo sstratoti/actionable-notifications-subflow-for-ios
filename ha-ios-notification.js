@@ -2,6 +2,8 @@
 'use strict';
 
 const haClient = require('./lib/ha-client');
+const { buildNotificationPayloads } = require('./lib/build-payload');
+const messageStore = require('./lib/message-store');
 
 module.exports = function (RED) {
   function normalizeNodeConfig(config) {
@@ -68,6 +70,52 @@ module.exports = function (RED) {
     node.outputCount = node.actions.length;
 
     node.homeAssistant = node.serverConfig ? haClient.connect(node.serverConfig) : null;
+
+    node.on('input', function (msg, send, done) {
+      send = send || function () { node.send.apply(node, arguments); };
+      done = done || function (err) { if (err) node.error(err, msg); };
+
+      if (msg.clear) {
+        done(); // manual clear path implemented in Task 14
+        return;
+      }
+
+      handleSend(node, msg, send, done);
+    });
+  }
+
+  async function handleSend(node, msg, send, done) {
+    const { error, payloads } = buildNotificationPayloads(node.nodeConfig, msg.notificationOverride);
+
+    if (error) {
+      node.status({ text: error, shape: 'ring', fill: 'red' });
+      done();
+      return;
+    }
+
+    try {
+      const now = Date.now();
+      let stored = node.context().get('sentMessages') || [];
+
+      for (const item of payloads) {
+        await haClient.sendNotification(node.homeAssistant, item.service.deviceName, item.payload.data);
+        stored = messageStore.recordSent(stored, {
+          tag: item.tag,
+          deviceName: item.service.deviceName,
+          dateCreated: now,
+          message: msg,
+        });
+        // [REV2] persist after EACH successful send, so a mid-fan-out failure never
+        // silently drops an already-delivered device from the tracking store.
+        node.context().set('sentMessages', stored);
+      }
+
+      node.status({ text: `sent to ${payloads.length} service(s)`, shape: 'dot', fill: 'green' });
+      done();
+    } catch (err) {
+      node.error(err, msg);
+      done(err);
+    }
   }
 
   RED.nodes.registerType('ha-ios-notification', HaIosNotificationNode);
