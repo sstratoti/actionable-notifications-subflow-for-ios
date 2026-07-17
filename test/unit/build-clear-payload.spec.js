@@ -1,7 +1,7 @@
 'use strict';
 
 require('should');
-const { buildManualClearPayloads } = require('../../lib/build-clear-payload');
+const { buildManualClearPayloads, buildAutoClearPayloads } = require('../../lib/build-clear-payload');
 
 function baseConfig(overrides = {}) {
   return {
@@ -40,5 +40,45 @@ describe('build-clear-payload: manual clear', () => {
     const config = baseConfig({ tag: 'configured' });
     const { payloads } = buildManualClearPayloads(config, { tag: 'from-override' });
     payloads[0].payload.data.data.tag.should.equal('FROM_OVERRIDE');
+  });
+});
+
+describe('build-clear-payload: auto-clear on action', () => {
+  it('errors when action_data has no allServices', () => {
+    const result = buildAutoClearPayloads({ tag: 'x', deviceName: 'a', allServices: [] });
+    result.error.should.equal('no services defined');
+    result.payloads.should.eql([]);
+  });
+
+  it('clears the tag on every OTHER device, excluding the device that fired the action', () => {
+    const actionData = {
+      tag: 'FRONT_DOOR',
+      deviceName: 'my_iphone',
+      allServices: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
+    };
+    const { payloads } = buildAutoClearPayloads(actionData);
+    payloads.should.have.length(1);
+    payloads[0].action.should.equal('notify.my_ipad');
+    payloads[0].payload.data.data.tag.should.equal('FRONT_DOOR');
+  });
+
+  it('produces no payloads when the firing device is the only target', () => {
+    const actionData = {
+      tag: 'FRONT_DOOR',
+      deviceName: 'my_iphone',
+      allServices: [{ deviceName: 'my_iphone' }],
+    };
+    const { payloads } = buildAutoClearPayloads(actionData);
+    payloads.should.have.length(0);
+  });
+
+  it('does not re-sanitize the tag (it is already sanitized on the fired event)', () => {
+    const actionData = {
+      tag: 'ALREADY_SANITIZED',
+      deviceName: 'a',
+      allServices: [{ deviceName: 'a' }, { deviceName: 'b' }],
+    };
+    const { payloads } = buildAutoClearPayloads(actionData);
+    payloads[0].payload.data.data.tag.should.equal('ALREADY_SANITIZED');
   });
 });
