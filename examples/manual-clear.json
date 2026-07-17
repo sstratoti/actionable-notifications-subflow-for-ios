@@ -1,0 +1,30 @@
+[
+  {
+    "id": "example-clear-tab",
+    "type": "tab",
+    "label": "HA iOS Notification: Manual Clear"
+  },
+  {
+    "id": "example-clear-inject",
+    "type": "inject",
+    "z": "example-clear-tab",
+    "name": "clear notification",
+    "props": [{ "p": "clear", "v": "true", "vt": "bool" }],
+    "x": 190,
+    "y": 100,
+    "wires": [["example-clear-notify"]]
+  },
+  {
+    "id": "example-clear-notify",
+    "type": "ha-ios-notification",
+    "z": "example-clear-tab",
+    "name": "Clear front-door tag",
+    "server": "",
+    "services": [{ "deviceName": "my_iphone" }],
+    "tag": "front-door",
+    "actions": [],
+    "x": 420,
+    "y": 100,
+    "wires": []
+  }
+]

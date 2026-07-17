@@ -1,0 +1,56 @@
+[
+  {
+    "id": "example-actions-tab",
+    "type": "tab",
+    "label": "HA iOS Notification: Actionable Buttons"
+  },
+  {
+    "id": "example-actions-inject",
+    "type": "inject",
+    "z": "example-actions-tab",
+    "name": "send with actions",
+    "props": [{ "p": "payload" }],
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 100,
+    "wires": [["example-actions-notify"]]
+  },
+  {
+    "id": "example-actions-notify",
+    "type": "ha-ios-notification",
+    "z": "example-actions-tab",
+    "name": "Front Door Alert",
+    "server": "",
+    "services": [{ "deviceName": "my_iphone" }],
+    "title": "Front Door",
+    "message": "Someone is at the door",
+    "actions": [
+      { "id": "unlock", "title": "Unlock", "destructive": false },
+      { "id": "ignore", "title": "Ignore", "destructive": true }
+    ],
+    "x": 420,
+    "y": 100,
+    "wires": [["example-unlock-debug"], ["example-ignore-debug"]]
+  },
+  {
+    "id": "example-unlock-debug",
+    "type": "debug",
+    "z": "example-actions-tab",
+    "name": "Unlock tapped",
+    "active": true,
+    "x": 650,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "example-ignore-debug",
+    "type": "debug",
+    "z": "example-actions-tab",
+    "name": "Ignore tapped",
+    "active": true,
+    "x": 650,
+    "y": 140,
+    "wires": []
+  }
+]

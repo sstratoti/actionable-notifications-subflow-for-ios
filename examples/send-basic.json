@@ -1,0 +1,33 @@
+[
+  {
+    "id": "example-send-basic-tab",
+    "type": "tab",
+    "label": "HA iOS Notification: Basic Send"
+  },
+  {
+    "id": "example-inject",
+    "type": "inject",
+    "z": "example-send-basic-tab",
+    "name": "send test notification",
+    "props": [{ "p": "payload" }],
+    "payload": "",
+    "payloadType": "date",
+    "x": 200,
+    "y": 120,
+    "wires": [["example-notify"]]
+  },
+  {
+    "id": "example-notify",
+    "type": "ha-ios-notification",
+    "z": "example-send-basic-tab",
+    "name": "Notify my_iphone",
+    "server": "",
+    "services": [{ "deviceName": "my_iphone" }],
+    "title": "Test Notification",
+    "message": "Hello from node-red-contrib-ha-ios-notification",
+    "actions": [],
+    "x": 430,
+    "y": 120,
+    "wires": []
+  }
+]

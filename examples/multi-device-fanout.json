@@ -1,0 +1,34 @@
+[
+  {
+    "id": "example-fanout-tab",
+    "type": "tab",
+    "label": "HA iOS Notification: Multi-Device Fanout"
+  },
+  {
+    "id": "example-fanout-inject",
+    "type": "inject",
+    "z": "example-fanout-tab",
+    "name": "send to everyone",
+    "props": [{ "p": "payload" }],
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 100,
+    "wires": [["example-fanout-notify"]]
+  },
+  {
+    "id": "example-fanout-notify",
+    "type": "ha-ios-notification",
+    "z": "example-fanout-tab",
+    "name": "Notify household",
+    "server": "",
+    "services": [{ "deviceName": "my_iphone" }, { "deviceName": "my_ipad" }],
+    "title": "Household Alert",
+    "message": "This goes to every device",
+    "staggerMs": 500,
+    "actions": [],
+    "x": 420,
+    "y": 100,
+    "wires": []
+  }
+]
