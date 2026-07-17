@@ -75,6 +75,17 @@
 
       $('#node-input-server').on('change', loadTargets);
       setTimeout(loadTargets, 100); // wait for the server typedInput to initialize
+
+      function loadCameraEntities() {
+        const serverId = $('#node-input-server').val();
+        if (!serverId) return;
+        $.getJSON('ha-ios-notification/camera-entities', { server: serverId }, function (result) {
+          const $list = $('#node-input-cameraEntity-list').empty();
+          (result.entities || []).forEach((id) => $list.append(`<option value="${id}">`));
+        });
+      }
+      $('#node-input-server').on('change', loadCameraEntities);
+      setTimeout(loadCameraEntities, 100);
     },
     oneditsave: function () {
       const services = [];
@@ -131,8 +142,13 @@
     <label>Notify Devices</label>
     <ol id="node-input-services-container"></ol>
   </div>
+  <div class="form-row">
+    <label for="node-input-cameraEntity">Camera Entity (optional)</label>
+    <input type="text" id="node-input-cameraEntity" list="node-input-cameraEntity-list" placeholder="camera.front_door">
+    <datalist id="node-input-cameraEntity-list"></datalist>
+  </div>
 
-  <!-- Actions / Camera / Map / Media / Advanced sections added in Tasks 22-24 -->
+  <!-- Actions / Map / Media / Advanced sections added in Tasks 23-24 -->
 </script>
 
 <script type="text/html" data-help-name="ha-ios-notification">

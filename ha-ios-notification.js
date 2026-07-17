@@ -81,6 +81,20 @@ module.exports = function (RED) {
     }
   });
 
+  RED.httpAdmin.get('/ha-ios-notification/camera-entities', RED.auth.needsPermission('flows.write'), function (req, res) {
+    const serverNode = RED.nodes.getNode(req.query.server);
+    if (!serverNode) {
+      res.json({ entities: [] });
+      return;
+    }
+    try {
+      const homeAssistant = haClient.connect(serverNode);
+      res.json({ entities: haClient.getCameraEntities(homeAssistant) });
+    } catch (err) {
+      res.json({ entities: [] });
+    }
+  });
+
   function HaIosNotificationNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;
