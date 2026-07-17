@@ -872,3 +872,63 @@ describe('live activity send', () => {
     });
   });
 });
+
+describe('multi-instance isolation', () => {
+  // [DEVIATION from task-19.5-brief.md] The brief's literal test text has no afterEach
+  // hook in this describe block. Every sibling top-level describe block in this file
+  // carries the identical hook (see `describe('send path', ...)` above) because
+  // node-red-node-test-helper reuses node ids across tests; without unloading between
+  // tests, the next helper.load() never invokes its ready callback and the test hangs
+  // to the mocha timeout.
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('two node instances with the SAME tag do not react to each other\'s actions', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      // both instances use the same tag + same device, but only n1 actually sent.
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'shared',
+        actions: [{ title: 'Open' }], wires: [['h1']],
+      },
+      {
+        id: 'n2', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'shared',
+        actions: [{ title: 'Open' }], wires: [['h2']],
+      },
+      { id: 'h1', type: 'helper' },
+      { id: 'h2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const h1 = helper.getNode('h1');
+      const h2 = helper.getNode('h2');
+
+      // Only n1 sends — so only n1's context should own the SHARED tag.
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        let h1Got = false;
+        let h2Got = false;
+        h1.on('input', () => { h1Got = true; });
+        h2.on('input', () => { h2Got = true; });
+
+        // Both instances receive the same global action event (both are subscribed),
+        // but only n1 has a matching sentMessages entry, so only h1 should fire.
+        mock.emitFakeActionEvent({
+          event: { action: '1', action_data: { tag: 'SHARED', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] } },
+          context: { user_id: 'u' },
+        });
+
+        setTimeout(() => {
+          h1Got.should.equal(true);
+          h2Got.should.equal(false); // n2 never sent -> must not react
+          done();
+        }, 40);
+      }, 30);
+    });
+  });
+});
