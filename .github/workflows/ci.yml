@@ -1,0 +1,48 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  validate-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - name: Validate package.json node-red manifest
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            if (!pkg['node-red'] || !pkg['node-red'].nodes) {
+              console.error('Missing node-red.nodes manifest section');
+              process.exit(1);
+            }
+            const fs = require('fs');
+            for (const [name, file] of Object.entries(pkg['node-red'].nodes)) {
+              if (!fs.existsSync(file)) {
+                console.error('node-red.nodes[' + name + '] points at missing file: ' + file);
+                process.exit(1);
+              }
+            }
+            console.log('node-red manifest OK');
+          "
