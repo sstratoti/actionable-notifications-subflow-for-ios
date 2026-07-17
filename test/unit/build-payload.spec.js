@@ -223,4 +223,24 @@ describe('build-payload: actions', () => {
     action.should.not.have.property('targetService');
     action.should.not.have.property('targetEntityId');
   });
+
+  it('[REV2] does not leak the raw service config (incl. serviceOverride tap-to-perform targets) into action.service', () => {
+    const config = baseConfig({
+      services: [{
+        deviceName: 'my_iphone',
+        serviceOverride: {
+          actions: {
+            1: { title: 'Unlock', targetService: 'lock.unlock', targetEntityId: 'lock.front_door' },
+          },
+        },
+      }],
+      actions: [{ title: 'Unlock' }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const action = payloads[0].payload.data.data.actions[0];
+    action.service.should.eql({ deviceName: 'my_iphone' });
+    action.service.should.not.have.property('serviceOverride');
+    JSON.stringify(action.service).should.not.match(/targetService/);
+    JSON.stringify(action.service).should.not.match(/targetEntityId/);
+  });
 });
