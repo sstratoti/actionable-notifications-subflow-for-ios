@@ -310,50 +310,99 @@
         return haContentTypes.filter(function (o) { return o.value.indexOf(t) !== -1; });
       });
 
+      var haServiceOptions = [];
+      function haLoadServices() {
+        var serverId = $('#node-input-server').val();
+        if (!serverId) return;
+        $.getJSON('ha-ios-notification/callable-services', { server: serverId }, function (r) {
+          haServiceOptions = (r.services || []).map(function (s) { return { label: s, value: s }; });
+        });
+      }
+      $('#node-input-server').on('change', haLoadServices);
+      setTimeout(haLoadServices, 100);
+
+      // entity picker filtered to the row's service domain; cached per domain.
+      var haEntityCacheByDomain = {};
+      function haEntityCombo($entInput, $svcInput) {
+        haCombo($entInput, function (term) {
+          var svc = ($svcInput.val() || '');
+          var dot = svc.indexOf('.');
+          var domain = dot > 0 ? svc.slice(0, dot) : '';
+          var key = domain || '*';
+          var cached = haEntityCacheByDomain[key];
+          if (!cached) {
+            var serverId = $('#node-input-server').val();
+            if (serverId) {
+              haEntityCacheByDomain[key] = []; // mark in-flight to avoid duplicate fetches
+              $.getJSON('ha-ios-notification/entities', domain ? { server: serverId, prefix: domain + '.' } : { server: serverId }, function (r) {
+                haEntityCacheByDomain[key] = (r.entities || []).map(function (e) { return { label: e, value: e }; });
+                $entInput.autocomplete('search', $entInput.val() || '');
+              });
+            }
+            return [];
+          }
+          var t = term.toLowerCase();
+          return cached.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
+        });
+        // invalidate this row's entity suggestions when its service domain changes
+        $svcInput.on('change', function () { $entInput.autocomplete('search', $entInput.val() || ''); });
+      }
+
       const $actionsList = $('#node-input-actions-container').editableList({
         addItem: function (container, index, data) {
-          container.css({ overflow: 'hidden' });
-          const row1 = $('<div style="display:flex; gap:8px; margin-bottom:4px;">').appendTo(container);
-          $('<input type="text" placeholder="Title" style="flex:2;">').val(data.title || '').appendTo(row1).addClass('action-title');
-          $('<input type="text" placeholder="id (optional)" style="flex:1;">').val(data.id || '').appendTo(row1).addClass('action-id');
+          container.css({ overflow: 'visible', padding: 0, border: 'none', background: 'none' });
+          var card = $('<div class="ha-action-card">').appendTo(container);
 
-          const row2 = $('<div style="display:flex; gap:8px; margin-bottom:4px;">').appendTo(container);
-          const modeSelect = $('<select class="action-activationMode" style="flex:1;">').appendTo(row2);
-          ['foreground', 'background'].forEach((m) => modeSelect.append(`<option value="${m}">${m}</option>`));
+          var head = $('<div class="ha-action-head">').appendTo(card);
+          $('<span class="ha-action-num">').text(index + 1).appendTo(head);
+          var preview = $('<span class="ha-action-preview">').text(data.title || 'Untitled').appendTo(head);
+
+          var body = $('<div class="ha-action-body">').appendTo(card);
+
+          var r1 = $('<div class="ha-pair" style="grid-template-columns:2fr 1fr">').appendTo(body);
+          var titleInput = $('<input type="text" placeholder="Title">').val(data.title || '').appendTo(
+            $('<div class="ha-sub"><small>Title</small></div>').appendTo(r1)).addClass('action-title');
+          titleInput.on('input', function () { preview.text($(this).val() || 'Untitled'); });
+          $('<input type="text" placeholder="1">').val(data.id || '').appendTo(
+            $('<div class="ha-sub"><small>ID · optional</small></div>').appendTo(r1)).addClass('action-id');
+
+          var r2 = $('<div class="ha-pair" style="grid-template-columns:1fr 1.6fr">').appendTo(body);
+          var modeWrap = $('<div class="ha-sub"><small>Activation</small></div>').appendTo(r2);
+          var modeSelect = $('<select class="action-activationMode">').appendTo(modeWrap);
+          ['foreground', 'background'].forEach(function (m) { modeSelect.append('<option value="' + m + '">' + m + '</option>'); });
           modeSelect.val(data.activationMode || 'foreground');
-          $('<input type="text" placeholder="URI (optional)" style="flex:2;">').val(data.uri || '').appendTo(row2).addClass('action-uri');
+          $('<input type="text" class="ha-mono" placeholder="/lovelace/security">').val(data.uri || '').appendTo(
+            $('<div class="ha-sub"><small>URI · optional</small></div>').appendTo(r2)).addClass('action-uri');
 
-          const row3 = $('<div style="display:flex; gap:12px;">').appendTo(container);
-          const destructive = $('<label style="font-weight:normal;"><input type="checkbox" class="action-destructive"> Destructive</label>').appendTo(row3);
-          if (data.destructive) destructive.find('input').prop('checked', true);
-          const authRequired = $('<label style="font-weight:normal;"><input type="checkbox" class="action-authenticationRequired"> Requires auth</label>').appendTo(row3);
-          if (data.authenticationRequired) authRequired.find('input').prop('checked', true);
+          var r3 = $('<div class="ha-checks" style="grid-template-columns:1fr 1fr">').appendTo(body);
+          var destr = $('<label class="ha-check"><input type="checkbox" class="action-destructive"> Destructive</label>').appendTo(r3);
+          if (data.destructive) destr.find('input').prop('checked', true);
+          var auth = $('<label class="ha-check"><input type="checkbox" class="action-authenticationRequired"> Requires auth</label>').appendTo(r3);
+          if (data.authenticationRequired) auth.find('input').prop('checked', true);
 
-          const row4 = $('<div style="display:flex; gap:8px; margin-top:4px;">').appendTo(container);
-          const svc = $('<input type="text" placeholder="Tap-to-perform service (optional, e.g. lock.unlock)" style="flex:2;" list="ha-ios-services">')
-            .val(data.targetService || '').appendTo(row4).addClass('action-targetService');
-          $('<input type="text" placeholder="Target entity (optional)" style="flex:2;" list="ha-ios-entities">')
-            .val(data.targetEntityId || '').appendTo(row4).addClass('action-targetEntityId');
+          var tap = $('<div class="ha-tap">').appendTo(body);
+          $('<div class="ha-tap-label">Tap-to-perform · optional</div>').appendTo(tap);
+          var tapPair = $('<div class="ha-pair">').appendTo(tap);
+          var svcWrap = $('<div class="ha-sub"><small>Service</small></div>').appendTo(tapPair);
+          var svcInput = $('<input type="text" class="ha-mono action-targetService" placeholder="e.g. lock.unlock">').val(data.targetService || '').appendTo(
+            $('<div class="ha-with-caret">').appendTo(svcWrap));
+          $('<span class="ha-caret">&#9660;</span>').appendTo(svcInput.parent());
+          var entWrap = $('<div class="ha-sub"><small>Target entity</small></div>').appendTo(tapPair);
+          var entInput = $('<input type="text" class="ha-mono action-targetEntityId" placeholder="type to search">').val(data.targetEntityId || '').appendTo(
+            $('<div class="ha-with-caret">').appendTo(entWrap));
+          $('<span class="ha-caret">&#9660;</span>').appendTo(entInput.parent());
+
+          // service combo (shared source), entity combo (domain-filtered, per row)
+          haCombo(svcInput, function (term) {
+            var t = term.toLowerCase();
+            return haServiceOptions.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
+          });
+          haEntityCombo(entInput, svcInput);
         },
         sortable: true,
         removable: true,
       });
       (node.actions || []).forEach((a) => $actionsList.editableList('addItem', a));
-
-      function loadServiceAndEntityLists() {
-        const serverId = $('#node-input-server').val();
-        if (!serverId) return;
-        $.getJSON('ha-ios-notification/callable-services', { server: serverId }, function (r) {
-          const $l = $('#ha-ios-services').empty();
-          (r.services || []).forEach((s) => $l.append(`<option value="${s}">`));
-        });
-        $.getJSON('ha-ios-notification/entities', { server: serverId }, function (r) {
-          const $l = $('#ha-ios-entities').empty();
-          (r.entities || []).forEach((e) => $l.append(`<option value="${e}">`));
-        });
-      }
-      $('#node-input-server').on('change', loadServiceAndEntityLists);
-      setTimeout(loadServiceAndEntityLists, 100);
 
       // Sound: single field resolved from the two legacy keys on load.
       $('#ha-sound-input').val(window.haIosSoundField.soundFieldValue(node.customSound, node.customSoundPreInstalled));
@@ -486,8 +535,6 @@
     <label>Actionable Buttons</label>
     <ol id="node-input-actions-container"></ol>
   </div>
-  <datalist id="ha-ios-services"></datalist>
-  <datalist id="ha-ios-entities"></datalist>
 
   </div></div>
   <div class="ha-section" id="ha-sec-map">
