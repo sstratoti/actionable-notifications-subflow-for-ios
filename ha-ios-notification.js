@@ -67,6 +67,20 @@ module.exports = function (RED) {
     };
   }
 
+  RED.httpAdmin.get('/ha-ios-notification/notify-targets', RED.auth.needsPermission('flows.write'), function (req, res) {
+    const serverNode = RED.nodes.getNode(req.query.server);
+    if (!serverNode) {
+      res.json({ targets: [] });
+      return;
+    }
+    try {
+      const homeAssistant = haClient.connect(serverNode);
+      res.json({ targets: haClient.getNotifyTargets(homeAssistant) });
+    } catch (err) {
+      res.json({ targets: [] });
+    }
+  });
+
   function HaIosNotificationNode(config) {
     RED.nodes.createNode(this, config);
     const node = this;

@@ -5,7 +5,7 @@
     color: '#C7E9C0',
     defaults: {
       name: { value: '' },
-      server: { value: '', type: 'server' },
+      server: { value: '', type: 'server', required: true },
       tag: { value: '' },
       services: { value: [] },
       group: { value: '' },
@@ -36,17 +36,105 @@
       audioPath: { value: '' },
       lazyLoading: { value: false },
       hideThumbnail: { value: false },
+      contentType: { value: '' },
       staggerMs: { value: 1000 },
       debugMode: { value: false },
     },
     inputs: 1,
     outputs: 0,
     icon: 'font-awesome/fa-mobile-phone',
+    paletteLabel: 'HA iOS Notification',
     label: function () {
       return this.name || 'HA iOS Notification';
     },
+    oneditprepare: function () {
+      const node = this;
+      const $targetsList = $('#node-input-services-container').editableList({
+        addItem: function (container, index, data) {
+          const row = $('<div style="display:flex; align-items:center;">').appendTo(container);
+          const checkbox = $('<input type="checkbox" style="margin-right:8px;">').appendTo(row);
+          const label = $('<span>').text(data.deviceName || '').appendTo(row);
+          checkbox.data('deviceName', data.deviceName);
+          if (data.selected) checkbox.prop('checked', true);
+        },
+        sortable: false,
+        removable: false,
+      });
+
+      function loadTargets() {
+        const serverId = $('#node-input-server').val();
+        if (!serverId) return;
+        $.getJSON('ha-ios-notification/notify-targets', { server: serverId }, function (result) {
+          $targetsList.editableList('empty');
+          const selected = (node.services || []).map((s) => s.deviceName);
+          (result.targets || []).forEach((deviceName) => {
+            $targetsList.editableList('addItem', { deviceName, selected: selected.includes(deviceName) });
+          });
+        });
+      }
+
+      $('#node-input-server').on('change', loadTargets);
+      setTimeout(loadTargets, 100); // wait for the server typedInput to initialize
+    },
     oneditsave: function () {
+      const services = [];
+      $('#node-input-services-container').editableList('items').each(function () {
+        const checkbox = $(this).find('input[type=checkbox]');
+        if (checkbox.prop('checked')) {
+          services.push({ deviceName: checkbox.data('deviceName') });
+        }
+      });
+      this.services = services;
       this.outputs = (this.actions || []).length;
     },
   });
+</script>
+
+<script type="text/html" data-template-name="ha-ios-notification">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-server"><i class="fa fa-server"></i> HA Server</label>
+    <input type="text" id="node-input-server">
+  </div>
+
+  <h4>Basics</h4>
+  <div class="form-row">
+    <label for="node-input-title">Title</label>
+    <input type="text" id="node-input-title">
+  </div>
+  <div class="form-row">
+    <label for="node-input-subtitle">Subtitle</label>
+    <input type="text" id="node-input-subtitle">
+  </div>
+  <div class="form-row">
+    <label for="node-input-message">Message</label>
+    <input type="text" id="node-input-message">
+  </div>
+  <div class="form-row">
+    <label for="node-input-group">Group</label>
+    <input type="text" id="node-input-group">
+  </div>
+  <div class="form-row">
+    <label for="node-input-tag">Tag (optional)</label>
+    <input type="text" id="node-input-tag">
+  </div>
+  <div class="form-row">
+    <label for="node-input-notificationUrl">Notification URL (optional)</label>
+    <input type="text" id="node-input-notificationUrl">
+  </div>
+
+  <h4>Targets</h4>
+  <div class="form-row">
+    <label>Notify Devices</label>
+    <ol id="node-input-services-container"></ol>
+  </div>
+
+  <!-- Actions / Camera / Map / Media / Advanced sections added in Tasks 22-24 -->
+</script>
+
+<script type="text/html" data-help-name="ha-ios-notification">
+  <p>Sends actionable iOS notifications via the Home Assistant Companion App, and routes tapped actions back to per-action outputs. Full reference in the README.</p>
 </script>
