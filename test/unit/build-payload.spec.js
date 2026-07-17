@@ -317,3 +317,57 @@ describe('build-payload: map', () => {
     ad.deviceName.should.equal(payloads[0].service.deviceName);
   });
 });
+
+describe('build-payload: media', () => {
+  it('adds no media fields when none are configured', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {});
+    const d = payloads[0].payload.data.data;
+    d.should.not.have.property('image');
+    d.should.not.have.property('video');
+    d.should.not.have.property('audio');
+    d.should.not.have.property('attachment');
+  });
+
+  it('adds the image path directly under data', () => {
+    const config = baseConfig({ imagePath: '/local/camera.jpg' });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.image.should.equal('/local/camera.jpg');
+  });
+
+  it('adds video and audio directly under data', () => {
+    const config = baseConfig({ videoPath: '/v.mp4', audioPath: '/a.mp3' });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const d = payloads[0].payload.data.data;
+    d.video.should.equal('/v.mp4');
+    d.audio.should.equal('/a.mp3');
+  });
+
+  it('[REV2] puts the override URL under attachment.url (not top-level contentUrl)', () => {
+    const config = baseConfig({ contentUrl: 'https://x/y.mp4' });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const d = payloads[0].payload.data.data;
+    d.should.not.have.property('contentUrl');
+    d.attachment.url.should.equal('https://x/y.mp4');
+  });
+
+  it('[REV2] puts content-type under attachment', () => {
+    const config = baseConfig({ imagePath: '/x', contentType: 'jpeg' });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.attachment['content-type'].should.equal('jpeg');
+  });
+
+  it('[REV2] puts lazy and hide-thumbnail under attachment (not top-level lazy)', () => {
+    const config = baseConfig({ imagePath: '/x.jpg', lazyLoading: true, hideThumbnail: true });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const d = payloads[0].payload.data.data;
+    d.should.not.have.property('lazy');
+    d.attachment.lazy.should.equal(true);
+    d.attachment['hide-thumbnail'].should.equal(true);
+  });
+
+  it('omits the attachment object entirely when no attachment sub-field is set', () => {
+    const config = baseConfig({ imagePath: '/x.jpg', hideThumbnail: false, lazyLoading: false });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.should.not.have.property('attachment');
+  });
+});
