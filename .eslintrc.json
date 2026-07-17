@@ -10,6 +10,9 @@
     "sourceType": "script"
   },
   "extends": "eslint:recommended",
+  "globals": {
+    "should": "readonly"
+  },
   "rules": {
     "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
   }
