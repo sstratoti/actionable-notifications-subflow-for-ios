@@ -3,7 +3,7 @@
 
 const haClient = require('./lib/ha-client');
 const { buildNotificationPayloads } = require('./lib/build-payload');
-const { buildManualClearPayloads } = require('./lib/build-clear-payload');
+const { buildManualClearPayloads, buildAutoClearPayloads } = require('./lib/build-clear-payload');
 const messageStore = require('./lib/message-store');
 const { findMatch } = require('./lib/message-store');
 
@@ -206,6 +206,31 @@ module.exports = function (RED) {
     outputs[actionIndex] = outMsg;
     node.status({ text: `action ${actionId} received`, shape: 'dot', fill: 'green' });
     node.send(outputs);
+
+    if (eventPayload.action_data.clearNotificationsOnAction) {
+      try {
+        const { payloads: clearPayloads } = buildAutoClearPayloads(eventPayload.action_data);
+        for (const item of clearPayloads) {
+          await haClient.sendNotification(node.homeAssistant, item.service.deviceName, item.payload.data);
+        }
+      } catch (err) {
+        node.error(err);
+      }
+    }
+
+    // [REV2] State cleanup. Always drop the firing device's own entry (dedup guard for
+    // duplicate/late events on the same tag+device). Under clear-on-action, also drop the
+    // OTHER devices' entries for this tag — their notifications were just cleared (matches
+    // v2's cleanUpMessages). With clear-on-action OFF, leave the others so each device can
+    // still be actioned independently (v2 behavior).
+    let after = node.context().get('sentMessages') || [];
+    after = messageStore.removeMatch(after, tag, deviceName);
+    if (eventPayload.action_data.clearNotificationsOnAction) {
+      (eventPayload.action_data.allServices || []).forEach((svc) => {
+        if (svc && svc.deviceName) after = messageStore.removeMatch(after, tag, svc.deviceName);
+      });
+    }
+    node.context().set('sentMessages', after);
   }
 
   RED.nodes.registerType('ha-ios-notification', HaIosNotificationNode);

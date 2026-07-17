@@ -394,3 +394,124 @@ describe('user-info enrichment', () => {
     });
   });
 });
+
+describe('auto-clear on action', () => {
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('clears the notification on every other device when clearNotificationsOnAction is set', function (done) {
+    const calls = [];
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push({ service, data }); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], isClearNotificationsOnAction: true,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        calls.length = 0; // discard the initial send calls, only interested in the clear call
+        mock.emitFakeActionEvent({
+          event: {
+            actionName: '1',
+            action_data: {
+              tag: 'FRONT_DOOR', deviceName: 'my_iphone',
+              allServices: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
+              clearNotificationsOnAction: true,
+            },
+          },
+          context: { user_id: 'user-123' },
+        });
+
+        setTimeout(() => {
+          calls.should.have.length(1);
+          calls[0].service.should.equal('my_ipad');
+          calls[0].data.message.should.equal('clear_notification');
+          done();
+        }, 20);
+      }, 20);
+    });
+  });
+
+  it('[REV2] purges the tracking store for the tag after an action is handled', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], isClearNotificationsOnAction: true,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        mock.emitFakeActionEvent({
+          event: {
+            action: '1',
+            action_data: {
+              tag: 'FRONT_DOOR', deviceName: 'my_iphone',
+              allServices: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
+              clearNotificationsOnAction: true,
+            },
+          },
+          context: { user_id: 'user-123' },
+        });
+        setTimeout(() => {
+          (n1.context().get('sentMessages') || []).should.have.length(0);
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
+
+  it('[REV2] with clear-on-action OFF, drops only the firing device and keeps the others actionable', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], isClearNotificationsOnAction: false,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        mock.emitFakeActionEvent({
+          event: {
+            action: '1',
+            action_data: {
+              tag: 'FRONT_DOOR', deviceName: 'my_iphone',
+              allServices: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
+              clearNotificationsOnAction: false,
+            },
+          },
+          context: { user_id: 'user-123' },
+        });
+        setTimeout(() => {
+          const stored = n1.context().get('sentMessages') || [];
+          stored.should.have.length(1);
+          stored[0].deviceName.should.equal('my_ipad'); // firing device dropped, other kept
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
+});
