@@ -185,7 +185,7 @@ describe('build-payload: actions', () => {
     const actionData = payloads[0].payload.data.data.action_data;
     actionData.tag.should.equal('FRONT_DOOR');
     actionData.deviceName.should.equal('my_iphone');
-    actionData.allServices.should.eql(config.services);
+    actionData.allServices.should.eql(config.services.map((s) => ({ deviceName: s.deviceName })));
   });
 
   it('carries populateUserInfo and clearNotificationsOnAction into action_data', () => {
@@ -242,5 +242,31 @@ describe('build-payload: actions', () => {
     action.service.should.not.have.property('serviceOverride');
     JSON.stringify(action.service).should.not.match(/targetService/);
     JSON.stringify(action.service).should.not.match(/targetEntityId/);
+  });
+
+  it('[REV2] does not leak the raw service config (incl. serviceOverride tap-to-perform targets) into action_data.allServices', () => {
+    const config = baseConfig({
+      services: [
+        {
+          deviceName: 'my_iphone',
+          serviceOverride: {
+            actions: {
+              1: { title: 'Unlock', targetService: 'lock.unlock', targetEntityId: 'lock.front_door', targetData: { code: '1234' } },
+            },
+          },
+        },
+        { deviceName: 'my_ipad' },
+      ],
+      actions: [{ title: 'Unlock' }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const allServices = payloads[0].payload.data.data.action_data.allServices;
+    allServices.should.eql([{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }]);
+    allServices.forEach((s) => {
+      s.should.not.have.property('serviceOverride');
+    });
+    JSON.stringify(allServices).should.not.match(/targetService/);
+    JSON.stringify(allServices).should.not.match(/targetEntityId/);
+    JSON.stringify(allServices).should.not.match(/targetData/);
   });
 });
