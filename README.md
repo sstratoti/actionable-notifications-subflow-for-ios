@@ -5,6 +5,17 @@ Assistant iOS Companion App, with entity/service pickers instead of hand-typed
 HA identifiers. Successor to the `iOS Actionable Notification v2` subflow
 (kept for reference in `legacy-subflow/`).
 
+## Documentation
+
+- **[Installation](docs/INSTALLATION.md)** — requirements, palette/npm
+  install, Docker notes, upgrading, migrating from the v2 subflow.
+- **[Usage](docs/USAGE.md)** — inputs/outputs, the `msg.notificationOverride`
+  system and precedence rules, action-override semantics, and the full
+  field-by-field config reference.
+- **[Testing](docs/TESTING.md)** — running the unit/integration suite, what
+  each test layer covers, conventions for adding new tests, and manual
+  smoke-testing against a real HA server.
+
 ## Requirements
 
 - Node-RED 3.x, Node.js >= 18
@@ -21,6 +32,9 @@ npm install node-red-contrib-ha-ios-notification
 
 Or via the Node-RED editor: Menu → Manage palette → Install → search
 `ha-ios-notification`.
+
+Full install steps (including Docker/containerized Node-RED and upgrading)
+are in [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ## Quick start
 
@@ -120,9 +134,11 @@ mode) — see the in-editor help and the sections above.
 
 ## Configuration reference
 
-See the in-editor help panel (info tab) for the full field-by-field
-reference, or `docs/superpowers/specs/2026-07-16-native-node-design.md` for
-the complete design rationale.
+See [docs/USAGE.md](docs/USAGE.md) for the full field-by-field reference and
+the override/precedence rules, the in-editor help panel (info tab) for a
+condensed version, or
+`docs/superpowers/specs/2026-07-16-native-node-design.md` for the complete
+design rationale.
 
 ## Development
 
@@ -133,7 +149,9 @@ npm install
 npm test
 ```
 
-See `CHANGELOG.md` for release history.
+See [docs/TESTING.md](docs/TESTING.md) for what the test suite covers, test
+conventions, and how to smoke-test against a real HA server. See
+`CHANGELOG.md` for release history.
 
 ## License
 
