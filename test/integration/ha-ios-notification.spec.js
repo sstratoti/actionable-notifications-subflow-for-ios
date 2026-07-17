@@ -692,3 +692,56 @@ describe('debug mode', () => {
     });
   });
 });
+
+describe('clear_badge command', () => {
+  // [DEVIATION from task-19.1-brief.md] The brief's literal test text has no afterEach
+  // hook in this describe block. Every sibling top-level describe block in this file
+  // carries the identical hook (see `describe('send path', ...)` above) because
+  // node-red-node-test-helper reuses node id 'n1' across tests; without unloading
+  // between tests, the next helper.load() never invokes its ready callback and the
+  // test hangs to the mocha timeout.
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('sends clear_badge to each service when msg.clearBadge is true', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push({ service, data }); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }, { deviceName: 'b' }], actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ clearBadge: true });
+      setTimeout(() => {
+        calls.should.have.length(2);
+        calls[0].data.message.should.equal('clear_badge');
+        done();
+      }, 30);
+    });
+  });
+
+  it('does not send a notification for a clearBadge message (no title/actions)', function (done) {
+    const calls = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async (domain, service, data) => { calls.push(data); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }], title: 'Should Not Send', actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ clearBadge: true });
+      setTimeout(() => {
+        calls.should.have.length(1);
+        calls[0].message.should.equal('clear_badge');
+        (calls[0].title === undefined).should.equal(true);
+        done();
+      }, 30);
+    });
+  });
+});

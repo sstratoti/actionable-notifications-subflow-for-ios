@@ -96,6 +96,11 @@ module.exports = function (RED) {
       send = send || function () { node.send.apply(node, arguments); };
       done = done || function (err) { if (err) node.error(err, msg); };
 
+      if (msg.clearBadge) {
+        handleClearBadge(node, msg, send, done);
+        return;
+      }
+
       if (msg.clear) {
         handleManualClear(node, msg, send, done);
         return;
@@ -142,6 +147,28 @@ module.exports = function (RED) {
       }
 
       node.status({ text: `sent to ${payloads.length} service(s)`, shape: 'dot', fill: 'green' });
+      done();
+    } catch (err) {
+      node.error(err, msg);
+      done(err);
+    }
+  }
+
+  async function handleClearBadge(node, msg, send, done) {
+    const override = msg.notificationOverride || {};
+    const services = (override.services && override.services.length > 0)
+      ? override.services
+      : node.nodeConfig.services;
+    if (!services || services.length === 0) {
+      node.status({ text: 'no services defined', shape: 'ring', fill: 'red' });
+      done();
+      return;
+    }
+    try {
+      for (const service of services) {
+        await haClient.sendNotification(node.homeAssistant, service.deviceName, { message: 'clear_badge' });
+      }
+      node.status({ text: `badge cleared on ${services.length} service(s)`, shape: 'dot', fill: 'blue' });
       done();
     } catch (err) {
       node.error(err, msg);
