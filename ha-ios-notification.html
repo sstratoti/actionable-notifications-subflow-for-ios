@@ -194,9 +194,119 @@
     <ol id="node-input-actions-container"></ol>
   </div>
 
-  <!-- Map / Media / Advanced sections added in Task 24 -->
+  <h4>Map</h4>
+  <div class="form-row">
+    <label for="node-input-firstLatitude">Latitude / Longitude (Pin 1)</label>
+    <input type="text" id="node-input-firstLatitude" style="width:45%" placeholder="lat">
+    <input type="text" id="node-input-firstLongitude" style="width:45%" placeholder="long">
+  </div>
+  <div class="form-row">
+    <label for="node-input-secondLatitude">Latitude / Longitude (Pin 2)</label>
+    <input type="text" id="node-input-secondLatitude" style="width:45%" placeholder="lat">
+    <input type="text" id="node-input-secondLongitude" style="width:45%" placeholder="long">
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-showLineBetweenPoints" style="width:auto">
+    <label for="node-input-showLineBetweenPoints" style="width:auto">Line between points</label>
+    <input type="checkbox" id="node-input-showCompass" style="width:auto; margin-left:12px;">
+    <label for="node-input-showCompass" style="width:auto">Compass</label>
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-showPointsOfInterest" style="width:auto">
+    <label for="node-input-showPointsOfInterest" style="width:auto">Points of interest</label>
+    <input type="checkbox" id="node-input-showScale" style="width:auto; margin-left:12px;">
+    <label for="node-input-showScale" style="width:auto">Scale</label>
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-showTraffic" style="width:auto">
+    <label for="node-input-showTraffic" style="width:auto">Traffic</label>
+    <input type="checkbox" id="node-input-showUserLocation" style="width:auto; margin-left:12px;">
+    <label for="node-input-showUserLocation" style="width:auto">User location</label>
+  </div>
+
+  <h4>Media</h4>
+  <div class="form-row">
+    <label for="node-input-imagePath">Image Path (10MB limit)</label>
+    <input type="text" id="node-input-imagePath">
+  </div>
+  <div class="form-row">
+    <label for="node-input-videoPath">Video Path (50MB limit)</label>
+    <input type="text" id="node-input-videoPath">
+  </div>
+  <div class="form-row">
+    <label for="node-input-audioPath">Audio Path (5MB limit)</label>
+    <input type="text" id="node-input-audioPath">
+  </div>
+  <div class="form-row">
+    <label for="node-input-contentUrl">Content URL (overrides image/video/audio)</label>
+    <input type="text" id="node-input-contentUrl">
+  </div>
+  <div class="form-row">
+    <label for="node-input-contentType">Content Type (optional, e.g. jpeg)</label>
+    <input type="text" id="node-input-contentType" placeholder="jpeg">
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-lazyLoading" style="width:auto">
+    <label for="node-input-lazyLoading" style="width:auto">Load media lazily</label>
+    <input type="checkbox" id="node-input-hideThumbnail" style="width:auto; margin-left:12px;">
+    <label for="node-input-hideThumbnail" style="width:auto">Hide thumbnail</label>
+  </div>
+
+  <h4>Advanced</h4>
+  <div class="form-row">
+    <label for="node-input-customSoundPreInstalled">Sound (bundled)</label>
+    <select id="node-input-customSoundPreInstalled">
+      <option value="default">default</option>
+      <option value="none">No Sound</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-customSound">Custom Sound (uploaded, overrides bundled)</label>
+    <input type="text" id="node-input-customSound" placeholder="my_upload.wav">
+  </div>
+  <div class="form-row">
+    <label for="node-input-interruptionLevel">Interruption Level</label>
+    <select id="node-input-interruptionLevel">
+      <option value="passive">Passive (iOS 15+)</option>
+      <option value="active">Active (Default)</option>
+      <option value="time-sensitive">Time Sensitive (iOS 15+)</option>
+      <option value="critical">Critical</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-userInfo" style="width:auto">
+    <label for="node-input-userInfo" style="width:auto">Populate user information</label>
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-isClearNotificationsOnAction" style="width:auto">
+    <label for="node-input-isClearNotificationsOnAction" style="width:auto">Clear on other devices when actioned</label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-staggerMs">Stagger between sends (ms, 0 = disabled)</label>
+    <input type="number" id="node-input-staggerMs" min="0" step="100">
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-debugMode" style="width:auto">
+    <label for="node-input-debugMode" style="width:auto">Debug mode</label>
+  </div>
 </script>
 
 <script type="text/html" data-help-name="ha-ios-notification">
-  <p>Sends actionable iOS notifications via the Home Assistant Companion App, and routes tapped actions back to per-action outputs. Full reference in the README.</p>
+  <p>Sends actionable iOS notifications through the Home Assistant iOS Companion App, and routes any tapped action back to the output matching that action.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>Triggers a send using this node's configured Basics/Targets/Actions/Map/Media fields.</dd>
+    <dt class="optional">notificationOverride <span class="property-type">object</span></dt>
+    <dd>Per-call override, three-tier precedence: per-service override &gt; this override &gt; node config default. Shape: <code>{services, tag, notificationBase, map, media, actions}</code>.</dd>
+    <dt class="optional">clear <span class="property-type">boolean</span></dt>
+    <dd>When true, sends a clear-notification instead of a send, using the configured/overridden tag and services.</dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <p>One output per configured action, in editor order. Fires only when a received <code>ios.notification_action_fired</code> event's tag+device matches something this node instance itself sent.</p>
+
+  <h3>Details</h3>
+  <p>Full configuration reference and migration notes from the v2 subflow are in the <a href="https://github.com/sstratoti/actionable-notifications-subflow-for-ios#readme">README</a>.</p>
 </script>
