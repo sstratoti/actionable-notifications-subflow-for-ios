@@ -270,3 +270,50 @@ describe('build-payload: actions', () => {
     JSON.stringify(allServices).should.not.match(/targetData/);
   });
 });
+
+describe('build-payload: map', () => {
+  it('does not add map fields when latitude/longitude are absent', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {});
+    payloads[0].payload.data.data.should.not.have.property('action_data');
+  });
+
+  it('adds latitude/longitude to action_data when both are present', () => {
+    const config = baseConfig({ firstLatitude: 40.1, firstLongitude: -75.1 });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const ad = payloads[0].payload.data.data.action_data;
+    ad.latitude.should.equal(40.1);
+    ad.longitude.should.equal(-75.1);
+  });
+
+  it('does not add a second pin when only one pair is present', () => {
+    const config = baseConfig({ firstLatitude: 40.1, firstLongitude: -75.1 });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.action_data.should.not.have.property('second_latitude');
+  });
+
+  it('adds the second pin and display flags when both pairs are present', () => {
+    const config = baseConfig({
+      firstLatitude: 40.1, firstLongitude: -75.1,
+      secondLatitude: 40.2, secondLongitude: -75.2,
+      showCompass: true, showTraffic: true,
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const ad = payloads[0].payload.data.data.action_data;
+    ad.second_latitude.should.equal(40.2);
+    ad.second_longitude.should.equal(-75.2);
+    ad.shows_compass.should.equal(true);
+    ad.shows_traffic.should.equal(true);
+    ad.shows_line_between_points.should.equal(false);
+  });
+
+  it('merges map fields into an existing action_data from a configured action', () => {
+    const config = baseConfig({
+      actions: [{ title: 'Open' }],
+      firstLatitude: 40.1, firstLongitude: -75.1,
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    const ad = payloads[0].payload.data.data.action_data;
+    ad.latitude.should.equal(40.1);
+    ad.deviceName.should.equal(payloads[0].service.deviceName);
+  });
+});
