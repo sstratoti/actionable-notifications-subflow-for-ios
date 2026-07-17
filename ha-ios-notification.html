@@ -303,6 +303,13 @@
       $('#node-input-server').on('change', haLoadCameras);
       setTimeout(haLoadCameras, 100);
 
+      var haContentTypes = ['jpeg','png','gif','mpeg','mp4','avi','aiff','wav','mp3','m4a']
+        .map(function (t) { return { label: t, value: t }; });
+      haCombo($('#node-input-contentType'), function (term) {
+        var t = term.toLowerCase();
+        return haContentTypes.filter(function (o) { return o.value.indexOf(t) !== -1; });
+      });
+
       const $actionsList = $('#node-input-actions-container').editableList({
         addItem: function (container, index, data) {
           container.css({ overflow: 'hidden' });
@@ -465,35 +472,27 @@
       <span class="ha-s-sub">location pins</span>
     </div>
     <div class="ha-section-body">
-  <div class="form-row">
-    <label for="node-input-firstLatitude">Latitude / Longitude (Pin 1)</label>
-    <input type="text" id="node-input-firstLatitude" style="width:45%" placeholder="lat">
-    <input type="text" id="node-input-firstLongitude" style="width:45%" placeholder="long">
-  </div>
-  <div class="form-row">
-    <label for="node-input-secondLatitude">Latitude / Longitude (Pin 2)</label>
-    <input type="text" id="node-input-secondLatitude" style="width:45%" placeholder="lat">
-    <input type="text" id="node-input-secondLongitude" style="width:45%" placeholder="long">
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-showLineBetweenPoints" style="width:auto">
-    <label for="node-input-showLineBetweenPoints" style="width:auto">Line between points</label>
-    <input type="checkbox" id="node-input-showCompass" style="width:auto; margin-left:12px;">
-    <label for="node-input-showCompass" style="width:auto">Compass</label>
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-showPointsOfInterest" style="width:auto">
-    <label for="node-input-showPointsOfInterest" style="width:auto">Points of interest</label>
-    <input type="checkbox" id="node-input-showScale" style="width:auto; margin-left:12px;">
-    <label for="node-input-showScale" style="width:auto">Scale</label>
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-showTraffic" style="width:auto">
-    <label for="node-input-showTraffic" style="width:auto">Traffic</label>
-    <input type="checkbox" id="node-input-showUserLocation" style="width:auto; margin-left:12px;">
-    <label for="node-input-showUserLocation" style="width:auto">User location</label>
-  </div>
-
+      <div class="ha-grid ha-align-start">
+        <label>Pin 1</label>
+        <div class="ha-pair">
+          <div class="ha-sub"><small>Latitude</small><input type="text" id="node-input-firstLatitude" placeholder="40.0209"></div>
+          <div class="ha-sub"><small>Longitude</small><input type="text" id="node-input-firstLongitude" placeholder="-75.1180"></div>
+        </div>
+        <label>Pin 2</label>
+        <div class="ha-pair">
+          <div class="ha-sub"><small>Latitude</small><input type="text" id="node-input-secondLatitude" placeholder="optional"></div>
+          <div class="ha-sub"><small>Longitude</small><input type="text" id="node-input-secondLongitude" placeholder="optional"></div>
+        </div>
+      </div>
+      <div class="ha-divider"></div>
+      <div class="ha-checks">
+        <label class="ha-check"><input type="checkbox" id="node-input-showLineBetweenPoints"> Line between points</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-showCompass"> Compass</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-showPointsOfInterest"> Points of interest</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-showScale"> Scale</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-showTraffic"> Traffic</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-showUserLocation"> User location</label>
+      </div>
   </div></div>
   <div class="ha-section" id="ha-sec-media">
     <div class="ha-section-head" onclick="window.__haToggle(this)">
@@ -501,33 +500,30 @@
       <span class="ha-s-sub">image · video · audio</span>
     </div>
     <div class="ha-section-body">
-  <div class="form-row">
-    <label for="node-input-imagePath">Image Path (10MB limit)</label>
-    <input type="text" id="node-input-imagePath">
-  </div>
-  <div class="form-row">
-    <label for="node-input-videoPath">Video Path (50MB limit)</label>
-    <input type="text" id="node-input-videoPath">
-  </div>
-  <div class="form-row">
-    <label for="node-input-audioPath">Audio Path (5MB limit)</label>
-    <input type="text" id="node-input-audioPath">
-  </div>
-  <div class="form-row">
-    <label for="node-input-contentUrl">Content URL (overrides image/video/audio)</label>
-    <input type="text" id="node-input-contentUrl">
-  </div>
-  <div class="form-row">
-    <label for="node-input-contentType">Content Type (optional, e.g. jpeg)</label>
-    <input type="text" id="node-input-contentType" placeholder="jpeg">
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-lazyLoading" style="width:auto">
-    <label for="node-input-lazyLoading" style="width:auto">Load media lazily</label>
-    <input type="checkbox" id="node-input-hideThumbnail" style="width:auto; margin-left:12px;">
-    <label for="node-input-hideThumbnail" style="width:auto">Hide thumbnail</label>
-  </div>
-
+      <p class="ha-note">Attach a camera snapshot, image, video, or audio clip.</p>
+      <div class="ha-grid ha-align-start">
+        <label for="node-input-imagePath">Image</label>
+        <input type="text" id="node-input-imagePath" class="ha-mono" placeholder="/local/front_door.jpg or camera.front_door">
+        <label for="node-input-videoPath">Video</label>
+        <input type="text" id="node-input-videoPath" class="ha-mono" placeholder="/local/clips/front_door.mp4">
+        <label for="node-input-audioPath">Audio</label>
+        <input type="text" id="node-input-audioPath" class="ha-mono" placeholder="/local/audio/chime.mp3">
+        <label for="node-input-contentUrl">Content URL</label>
+        <input type="text" id="node-input-contentUrl" class="ha-mono" placeholder="https://…  (overrides the paths above)">
+        <label for="node-input-contentType">Content type</label>
+        <div class="ha-control">
+          <div class="ha-with-caret">
+            <input type="text" id="node-input-contentType" placeholder="auto-detected — jpeg, png, gif, mp4, mpeg, avi, wav, aiff, mp3…">
+            <span class="ha-caret">&#9660;</span>
+          </div>
+          <div class="ha-hint">Usually detected from the file — set only to override.</div>
+        </div>
+      </div>
+      <div class="ha-divider"></div>
+      <div class="ha-checks">
+        <label class="ha-check"><input type="checkbox" id="node-input-lazyLoading"> Load media lazily</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-hideThumbnail"> Hide thumbnail</label>
+      </div>
   </div></div>
   <div class="ha-section" id="ha-sec-advanced">
     <div class="ha-section-head" onclick="window.__haToggle(this)">
@@ -716,33 +712,31 @@
       <span class="ha-s-sub">iOS 17.2+ · HA Core 2026.7+</span>
     </div>
     <div class="ha-section-body">
-  <div class="form-row">
-    <input type="checkbox" id="node-input-liveActivity" style="width:auto">
-    <label for="node-input-liveActivity" style="width:auto">Send as a Live Activity (live_update)</label>
-  </div>
-  <div class="form-row">
-    <label for="node-input-progress">Progress / Max</label>
-    <input type="number" id="node-input-progress" style="width:45%" placeholder="progress">
-    <input type="number" id="node-input-progressMax" style="width:45%" placeholder="max">
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-chronometer" style="width:auto">
-    <label for="node-input-chronometer" style="width:auto">Chronometer</label>
-    <input type="number" id="node-input-when" placeholder="when (s)" style="width:30%; margin-left:8px;">
-    <input type="checkbox" id="node-input-whenRelative" style="width:auto; margin-left:8px;">
-    <label for="node-input-whenRelative" style="width:auto">relative</label>
-  </div>
-  <div class="form-row">
-    <label for="node-input-notificationIcon">Icon / Icon color</label>
-    <input type="text" id="node-input-notificationIcon" style="width:45%" placeholder="mdi:washing-machine">
-    <input type="text" id="node-input-notificationIconColor" style="width:45%" placeholder="#2196F3">
-  </div>
-  <div class="form-row">
-    <label for="node-input-color">Accent / BG / Text color</label>
-    <input type="text" id="node-input-color" style="width:30%" placeholder="accent">
-    <input type="text" id="node-input-backgroundColor" style="width:30%" placeholder="bg">
-    <input type="text" id="node-input-textColor" style="width:30%" placeholder="text">
-  </div>
+      <label class="ha-check" style="margin-bottom:9px"><input type="checkbox" id="node-input-liveActivity"> Send as a Live Activity (live_update)</label>
+      <div class="ha-grid ha-align-start">
+        <label>Progress</label>
+        <div class="ha-pair">
+          <div class="ha-sub"><small>Value</small><input type="number" id="node-input-progress" placeholder="40"></div>
+          <div class="ha-sub"><small>Max</small><input type="number" id="node-input-progressMax" placeholder="100"></div>
+        </div>
+        <label>Timer</label>
+        <div class="ha-pair" style="grid-template-columns:auto 1fr auto;align-items:center">
+          <label class="ha-check"><input type="checkbox" id="node-input-chronometer"> Chronometer</label>
+          <input type="number" id="node-input-when" placeholder="when (s)">
+          <label class="ha-check"><input type="checkbox" id="node-input-whenRelative"> relative</label>
+        </div>
+        <label>Icon</label>
+        <div class="ha-pair">
+          <div class="ha-sub"><small>Name</small><input type="text" id="node-input-notificationIcon" placeholder="mdi:washing-machine"></div>
+          <div class="ha-sub"><small>Color</small><input type="text" id="node-input-notificationIconColor" placeholder="#2196F3"></div>
+        </div>
+        <label>Colors</label>
+        <div class="ha-triple">
+          <div class="ha-sub"><small>Accent</small><input type="text" id="node-input-color" placeholder="#2196F3"></div>
+          <div class="ha-sub"><small>Background</small><input type="text" id="node-input-backgroundColor" placeholder="#111"></div>
+          <div class="ha-sub"><small>Text</small><input type="text" id="node-input-textColor" placeholder="#fff"></div>
+        </div>
+      </div>
   </div></div>
 </script>
 
