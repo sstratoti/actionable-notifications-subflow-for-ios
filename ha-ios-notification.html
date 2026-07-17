@@ -1,4 +1,8 @@
 <!-- ha-ios-notification.html -->
+<style>
+  /* Keep the device-picker autocomplete dropdown above the Node-RED edit tray. */
+  .ui-autocomplete.ui-menu { z-index: 10000 !important; }
+</style>
 <script type="text/javascript">
   RED.nodes.registerType('ha-ios-notification', {
     category: 'home_assistant',
@@ -62,32 +66,87 @@
     },
     oneditprepare: function () {
       const node = this;
+      // Classified companion-app notify targets, cached for the autocomplete
+      // source. Each: { deviceName: 'mobile_app_<slug>', label, platform }.
+      let targetOptions = [];
+
+      function findTarget(deviceName) {
+        return targetOptions.find((t) => t.deviceName === deviceName);
+      }
+      function platformTag(platform) {
+        if (platform === 'ios') return ' — iOS';
+        if (platform === 'other') return ' — non-iOS';
+        return '';
+      }
+      function updateTargetHint($hint, deviceName) {
+        const t = findTarget(deviceName);
+        $hint.text(t ? t.label + platformTag(t.platform) : '');
+      }
+
+      // Each row is a free-type input with a type-to-search dropdown. The
+      // dropdown suggests iOS devices by default (empty term) and matches any
+      // companion-app device when you type. The saved value is the raw
+      // deviceName ('mobile_app_<slug>'); a dim hint shows the friendly label.
       const $targetsList = $('#node-input-services-container').editableList({
         addItem: function (container, index, data) {
-          const row = $('<div style="display:flex; align-items:center;">').appendTo(container);
-          const checkbox = $('<input type="checkbox" style="margin-right:8px;">').appendTo(row);
-          const label = $('<span>').text(data.deviceName || '').appendTo(row);
-          checkbox.data('deviceName', data.deviceName);
-          if (data.selected) checkbox.prop('checked', true);
+          container.css({ display: 'flex', 'align-items': 'center', gap: '8px' });
+          const input = $('<input type="text" placeholder="Type to search devices (iOS suggested)…" style="flex:1.2;">')
+            .val((data && data.deviceName) || '')
+            .appendTo(container)
+            .addClass('ha-target-input');
+          const $hint = $('<span class="ha-target-hint" style="flex:1; color:#888; font-size:0.85em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">').appendTo(container);
+          updateTargetHint($hint, input.val());
+
+          input.autocomplete({
+            minLength: 0,
+            delay: 0,
+            source: function (request, response) {
+              const term = (request.term || '').toLowerCase();
+              let items;
+              if (term) {
+                items = targetOptions.filter((t) =>
+                  t.label.toLowerCase().indexOf(term) !== -1 ||
+                  t.deviceName.toLowerCase().indexOf(term) !== -1);
+              } else {
+                // Empty term: suggest iOS devices. If none are classified as iOS
+                // (e.g. registries unreachable, or an all-Android setup), fall back
+                // to showing everything rather than an empty dropdown.
+                const ios = targetOptions.filter((t) => t.platform === 'ios');
+                items = ios.length ? ios : targetOptions;
+              }
+              response(items.map((t) => ({ label: t.label + platformTag(t.platform), value: t.deviceName })));
+            },
+            select: function (event, ui) {
+              input.val(ui.item.value);
+              updateTargetHint($hint, ui.item.value);
+              return false;
+            },
+            focus: function () { return false; }, // keep the value = deviceName during keyboard nav
+          });
+          input.on('focus', function () { $(this).autocomplete('search', ''); });
+          input.on('input change', function () { updateTargetHint($hint, $(this).val()); });
         },
-        sortable: false,
-        removable: false,
+        removable: true,
+        sortable: true,
       });
 
       function loadTargets() {
         const serverId = $('#node-input-server').val();
         if (!serverId) return;
         $.getJSON('ha-ios-notification/notify-targets', { server: serverId }, function (result) {
-          $targetsList.editableList('empty');
-          const selected = (node.services || []).map((s) => s.deviceName);
-          (result.targets || []).forEach((deviceName) => {
-            $targetsList.editableList('addItem', { deviceName, selected: selected.includes(deviceName) });
+          targetOptions = (result && result.targets) || [];
+          // Refresh hints on already-rendered rows now that friendly labels are known.
+          $('#node-input-services-container').editableList('items').each(function () {
+            updateTargetHint($(this).find('.ha-target-hint'), $(this).find('.ha-target-input').val());
           });
         });
       }
 
       $('#node-input-server').on('change', loadTargets);
       setTimeout(loadTargets, 100); // wait for the server typedInput to initialize
+
+      // Populate rows from existing config (backward-compatible services shape).
+      (node.services || []).forEach((s) => $targetsList.editableList('addItem', { deviceName: s.deviceName }));
 
       function loadCameraEntities() {
         const serverId = $('#node-input-server').val();
@@ -151,10 +210,12 @@
     },
     oneditsave: function () {
       const services = [];
+      const seenDevices = {};
       $('#node-input-services-container').editableList('items').each(function () {
-        const checkbox = $(this).find('input[type=checkbox]');
-        if (checkbox.prop('checked')) {
-          services.push({ deviceName: checkbox.data('deviceName') });
+        const deviceName = ($(this).find('.ha-target-input').val() || '').trim();
+        if (deviceName && !seenDevices[deviceName]) {
+          seenDevices[deviceName] = true;
+          services.push({ deviceName });
         }
       });
       this.services = services;
@@ -222,8 +283,11 @@
   </div>
 
   <h4>Targets</h4>
-  <div class="form-row">
-    <label>Notify Devices</label>
+  <div class="form-row" style="margin-bottom:0;">
+    <label style="width:auto;">Notify Devices</label>
+    <div style="color:#888; font-size:0.85em; margin:2px 0 6px 0;">
+      Type to search. iOS devices are suggested by default; you can still type any notify target. Click <b>add</b> for more devices.
+    </div>
     <ol id="node-input-services-container"></ol>
   </div>
   <div class="form-row">

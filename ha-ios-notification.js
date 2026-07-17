@@ -67,17 +67,26 @@ module.exports = function (RED) {
     };
   }
 
-  RED.httpAdmin.get('/ha-ios-notification/notify-targets', RED.auth.needsPermission('flows.write'), function (req, res) {
+  RED.httpAdmin.get('/ha-ios-notification/notify-targets', RED.auth.needsPermission('flows.write'), async function (req, res) {
     const serverNode = RED.nodes.getNode(req.query.server);
     if (!serverNode) {
-      res.json({ targets: [] });
+      res.json({ targets: [], classified: false });
       return;
     }
     try {
       const homeAssistant = haClient.connect(serverNode);
-      res.json({ targets: haClient.getNotifyTargets(homeAssistant) });
+      // Prefer the classified companion-app list (iOS-tagged, friendly labels).
+      // Fall back to the plain notify-service names as free-type suggestions if
+      // the registries aren't available (older HA, permissions, transport).
+      const classified = await haClient.getClassifiedNotifyTargets(homeAssistant);
+      if (classified) {
+        res.json({ targets: classified, classified: true });
+      } else {
+        const names = haClient.getNotifyTargets(homeAssistant);
+        res.json({ targets: names.map((deviceName) => ({ deviceName, label: deviceName, platform: 'unknown' })), classified: false });
+      }
     } catch (err) {
-      res.json({ targets: [] });
+      res.json({ targets: [], classified: false });
     }
   });
 
