@@ -118,6 +118,10 @@ module.exports = function (RED) {
       const now = Date.now();
       let stored = node.context().get('sentMessages') || [];
 
+      if (node.nodeConfig.debugMode) {
+        node.trace(`ha-ios-notification: sending to ${payloads.length} service(s): ${JSON.stringify(payloads.map((p) => p.action))}`);
+      }
+
       for (let i = 0; i < payloads.length; i += 1) {
         const item = payloads[i];
         await haClient.sendNotification(node.homeAssistant, item.service.deviceName, item.payload.data);
@@ -202,6 +206,15 @@ module.exports = function (RED) {
     if (actionIndex === -1) return;
 
     const outMsg = { payload: event, actionId, matchedMessage: owned.message };
+
+    if (node.nodeConfig.debugMode) {
+      outMsg._debug = {
+        matchedTag: tag,
+        matchedDeviceName: deviceName,
+        rawEvent: event,
+      };
+      node.trace(`ha-ios-notification: action ${actionId} matched tag ${tag}`);
+    }
 
     if (populateUserInfo && event.context && event.context.user_id) {
       try {

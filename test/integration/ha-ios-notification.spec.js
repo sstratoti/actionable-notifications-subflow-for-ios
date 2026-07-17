@@ -611,3 +611,84 @@ describe('rate limiting', () => {
     });
   });
 });
+
+describe('debug mode', () => {
+  // [DEVIATION from task-19-brief.md] The brief's literal test text has no afterEach
+  // hook in this describe block. Every sibling top-level describe block in this file
+  // carries the identical hook (see `describe('send path', ...)` above) because
+  // node-red-node-test-helper reuses node id 'n1' across tests; without unloading
+  // between tests, the next helper.load() never invokes its ready callback and the
+  // test hangs to the mocha timeout.
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('attaches msg._debug to the action-received output when debugMode is true', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], debugMode: true,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          msg.should.have.property('_debug');
+          msg._debug.should.have.property('matchedTag', 'FRONT_DOOR');
+          done();
+        });
+
+        mock.emitFakeActionEvent({
+          event: {
+            actionName: '1',
+            action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+          },
+          context: { user_id: 'user-123' },
+        });
+      }, 20);
+    });
+  });
+
+  it('does not attach msg._debug when debugMode is false', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], debugMode: false,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          (msg._debug === undefined).should.equal(true);
+          done();
+        });
+
+        mock.emitFakeActionEvent({
+          event: {
+            actionName: '1',
+            action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+          },
+          context: { user_id: 'user-123' },
+        });
+      }, 20);
+    });
+  });
+});
