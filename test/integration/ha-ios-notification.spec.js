@@ -417,6 +417,13 @@ describe('auto-clear on action', () => {
         id: 'n1', type: 'ha-ios-notification', server: 'server1',
         services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
         actions: [{ title: 'Open' }], isClearNotificationsOnAction: true,
+        // [DEVIATION from task-17-brief.md, surfaced by task-18-brief.md] This test
+        // predates staggerMs (Task 18) and drives a 2-device fan-out whose sends must
+        // both land within this test's setTimeout windows. Task 18 made the default
+        // stagger 1000ms, which would leave a dangling delayed send/context-write
+        // running past teardown. Set staggerMs: 0 to preserve the original intent
+        // (auto-clear behavior), since this test isn't about timing.
+        staggerMs: 0,
         wires: [['n2']],
       },
       { id: 'n2', type: 'helper' },
@@ -457,6 +464,13 @@ describe('auto-clear on action', () => {
         id: 'n1', type: 'ha-ios-notification', server: 'server1',
         services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
         actions: [{ title: 'Open' }], isClearNotificationsOnAction: true,
+        // [DEVIATION from task-17-brief.md, surfaced by task-18-brief.md] This test
+        // predates staggerMs (Task 18) and drives a 2-device fan-out whose sends must
+        // both land within this test's setTimeout windows. Task 18 made the default
+        // stagger 1000ms, which would leave a dangling delayed send/context-write
+        // running past teardown. Set staggerMs: 0 to preserve the original intent
+        // (tracking-store purge logic), since this test isn't about timing.
+        staggerMs: 0,
         wires: [['n2']],
       },
       { id: 'n2', type: 'helper' },
