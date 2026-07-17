@@ -18,8 +18,12 @@ should feel native to Node-RED and be easier to scan and fill in.
 
 ## Guardrails (non-negotiable)
 
-- **Editor-only.** No change to the saved config schema or the node runtime.
-  Every existing flow that uses this node keeps working with no edits.
+- **Editor-only (runtime/schema untouched).** No change to the saved config
+  schema or the node runtime. Every existing flow that uses this node keeps
+  working with no edits. Non-runtime supporting changes are in scope: a new
+  browser-served resource file (`resources/sound-field.js`) with its unit test,
+  and a `package.json` `files`-allowlist entry so it ships — none of these
+  affect runtime behavior.
 - **Backward compatible.** Existing saved nodes open correctly in the new
   panel and, when re-saved, migrate cleanly with identical runtime behavior
   (see Backward Compatibility).
@@ -48,14 +52,14 @@ should feel native to Node-RED and be easier to scan and fill in.
 | Question | Decision |
 |---|---|
 | Section layout | Collapsible bordered section cards (chevron header + title). |
-| Default open state | **Smart:** Basics + Targets always open; any section holding non-default values auto-opens; the rest collapsed. Per-dialog-open (not persisted). |
+| Default open state | **Smart:** Basics + Targets always open; any section holding non-default values auto-opens; the rest collapsed. Per-dialog-open (not persisted). Auto-open is a mechanical predicate against the `registerType` defaults with named exceptions — see §1. |
 | Alignment | One uniform label/control grid per section; paired fields get sub-labels and align under the control column. |
 | Placeholders | Realistic sample data in every free-text field. |
 | Value pickers | Known-but-open value sets → one searchable type-or-pick combo (the device-picker widget). Genuinely fixed sets stay plain `<select>`. |
 | Sound field | Merge the bundled `<select>` and the "custom sound" box into one searchable combo. |
 | Tap-to-perform pickers | Upgrade Service + Target-entity from `<datalist>` to the searchable widget; entity suggestions filter to the chosen service's domain. |
 | Content type | Searchable combo suggesting iOS-supported types; free-form (per HA docs). |
-| Foreground presentation | One labeled segmented toggle (Alert / Badge / Sound) with a one-line explanation. |
+| Foreground presentation | One labeled segmented toggle group (Alert / Badge / Sound) — **multi-select**, each active segment showing an explicit on/off check, plus a one-line explanation. |
 | Action buttons | Each button rendered as a bordered card (header preview + fields + tap-to-perform block). |
 | Config schema | Unchanged. Editor load/save adapts to the existing keys. |
 
@@ -68,18 +72,45 @@ Activity) becomes a bordered card: a clickable header (chevron + title +
 optional subtitle and/or a small count chip like "2 devices") over a body that
 shows/hides on click.
 
-**Smart default open state**, evaluated when the edit dialog opens:
+**Smart default open state**, evaluated in `oneditprepare` when the dialog opens.
+State is not persisted (Node-RED reopens the dialog fresh each time; expected
+editor behavior).
 
-- Basics and Targets are always open.
-- A section opens if it holds a non-default value — e.g. Actions opens when at
-  least one action exists; Map opens when a latitude is set; Media opens when a
-  path/URL is set; Advanced opens when a non-default sound/interruption/badge/
-  toggle is set; Live Activity opens when its checkbox is on.
-- Otherwise the section is collapsed.
+- **Basics and Targets are always open.**
+- Every other section opens iff it **holds a non-default value**, decided
+  mechanically rather than by hand-listing fields (hand-listing is how the field
+  that matters gets forgotten). The rule is: *a section auto-opens if any field
+  mapped to that section differs from its `defaults` value declared in
+  `registerType`* — with three named exceptions where a raw comparison is wrong:
 
-Each section defines a small predicate `hasContent(config)` deciding auto-open.
-State is not persisted (Node-RED reopens the dialog fresh each time; this is the
-expected editor behavior).
+  1. **`staggerMs` (Advanced)** — its editor default is `1000`, but nodes saved
+     before the field existed have `undefined`/`''`, and `normalizeNodeConfig`
+     treats `undefined`/`''`/`1000` all as the default 1000. Treat all three as
+     "default" (do not auto-open Advanced for them).
+  2. **Sound (Advanced)** — compare the **resolved** value
+     `soundFieldValue(customSound, customSoundPreInstalled) !== 'default'`, not
+     the raw keys (an old node with `customSoundPreInstalled: 'default'`,
+     `customSound: ''` is still default).
+  3. **`presentationOptions` (Advanced)** — an array; "non-default" means
+     `length > 0`, not `!== []` (array identity comparison is always true).
+
+- **Field → section map** (the authoritative list the predicate iterates; every
+  config field appears exactly once):
+
+  | Section | Fields |
+  |---|---|
+  | Basics (always open) | `title`, `subtitle`, `message`, `group`, `tag`, `notificationUrl` |
+  | Targets (always open) | `services`, `cameraEntity` |
+  | Actions | `actions` (open when non-empty) |
+  | Map | `firstLatitude`, `firstLongitude`, `secondLatitude`, `secondLongitude`, `showLineBetweenPoints`, `showCompass`, `showPointsOfInterest`, `showScale`, `showTraffic`, `showUserLocation` |
+  | Media | `imagePath`, `videoPath`, `audioPath`, `contentUrl`, `contentType`, `lazyLoading`, `hideThumbnail` |
+  | Advanced | `customSound`, `customSoundPreInstalled` (via resolved sound), `interruptionLevel`, `userInfo`, `isClearNotificationsOnAction`, `staggerMs`, `debugMode`, `badge`, `presentationOptions` |
+  | Live Activity | `liveActivity`, `progress`, `progressMax`, `chronometer`, `when`, `whenRelative`, `notificationIcon`, `notificationIconColor`, `color`, `backgroundColor`, `textColor` |
+
+- **Live Activity** opens if `liveActivity` is on **or any other Live Activity
+  field is non-default** — not solely on the checkbox (a node with `progress`/
+  `when`/`notificationIcon` set but the toggle off still holds non-default
+  values in that section).
 
 ### 2. Alignment
 
@@ -113,9 +144,14 @@ of good values but an open long tail (the user may legitimately type something
 not in the list). A field stays a plain `<select>` when its values are a fixed,
 closed enum. Under this rule:
 
-- **Combos:** notify devices (done), sound, tap-to-perform service,
-  tap-to-perform entity, content type.
+- **Combos:** notify devices (done), sound, camera entity, tap-to-perform
+  service, tap-to-perform entity, content type.
 - **Plain selects (unchanged):** Interruption Level, per-action Activation Mode.
+
+**Camera entity.** Today a native `<datalist>` (`camera.*` entities). Per the
+governing rule it becomes the searchable widget for consistency, reading from
+`/ha-ios-notification/camera-entities` (which already exists), free-type
+retained.
 
 **Sound (merge two fields → one).** The 127-entry bundled `<select>` and the
 separate `customSound` text box merge into a single searchable field. The
@@ -129,10 +165,20 @@ resolution are specified under Backward Compatibility.
 from the existing `/ha-ios-notification/callable-services` endpoint (all
 `domain.service` strings). The Target-entity field filters its suggestions to
 the **domain of the currently-selected service** in the same action row: it
-derives the domain from the service value (text before the first `.`) and
-requests `/ha-ios-notification/entities?prefix=<domain>.` — the endpoint already
-supports this `prefix` param. With no service selected, it falls back to
-unfiltered entity suggestions. Free-type is always allowed.
+derives the domain from the service value (text before the first `.`, matching
+how the runtime parses `targetService`) and requests
+`/ha-ios-notification/entities?prefix=<domain>.` — the endpoint already reads
+this `prefix` param and applies `id.startsWith(prefix)` (the trailing `.` keeps
+`light.` from matching a `light_switch`-style domain). With no service selected,
+it falls back to unfiltered entity suggestions. Free-type is always allowed.
+
+**Fetch strategy for the per-row entity picker.** Suggestions are fetched per
+action row keyed by the row's current service domain. To avoid N redundant GETs
+per dialog open (one node can have many action cards): fetch lazily on first
+focus/keystroke of the entity field and re-fetch only when the row's service
+domain changes; cache the result per domain within the dialog session; debounce
+typing. The service picker's suggestions (all callable services) are fetched
+once and shared across rows.
 
 **Content type.** A searchable combo. Per the HA companion attachments docs the
 value is free-form (HA auto-detects it from the file; this field is an
@@ -145,9 +191,23 @@ usually auto-detected and only set to override.
 
 The three loose `presentationOptions` checkboxes (alert / badge / sound) become
 one labeled segmented toggle group: a bordered control with three toggle
-buttons, each showing an on/off state, plus a one-line explanation ("How the
-notification shows while the app is already open"). It reads and writes the same
-`presentationOptions` array — purely a nicer UI over the existing config key.
+buttons, plus a one-line explanation ("How the notification shows while the app
+is already open").
+
+**Multi-select, made explicit.** These three options are independent on/off
+toggles, not a pick-one choice — but a plain segmented control conventionally
+reads as single-select. To remove that ambiguity, each **active** segment shows
+an explicit on indicator (a check glyph), and toggling one segment never affects
+the others. The visual must not rely on pressed-vs-unpressed styling alone
+(insufficient contrast in some dark themes) — the per-segment check is required.
+
+It reads and writes the same `presentationOptions` array — purely a nicer UI
+over the existing config key. **Emit order:** write the array in fixed order
+`['alert', 'badge', 'sound']` (matching today's DOM/checkbox order) so re-saving
+a node with 2+ options on does not produce a spurious flow-file diff. All-off
+produces `[]`, byte-identical to the current three-unchecked-checkboxes case
+(verified: `normalizeNodeConfig` passes arrays through and the builder emits
+`presentation_options` only when non-empty).
 
 ### 6. Action cards
 
@@ -162,6 +222,23 @@ Each entry in the Actions editable list renders as a bordered card:
 This keeps a multi-button configuration from collapsing into an
 undifferentiated stack of inputs. The editable list stays a single
 `editableList` (add / remove / reorder) — only the per-row rendering changes.
+
+**Save invariants the row renderer must preserve** (a rewrite of `oneditsave`'s
+per-row collector must not change any of these — they define the saved `actions`
+shape the runtime and outputs depend on):
+
+- `this.outputs = actions.length` after collecting — this drives the node's
+  dynamic output count.
+- Rows with an empty title are dropped (not saved as blank actions).
+- Optional keys are emitted only when non-empty: `id`, `uri`, `targetService`,
+  `targetEntityId` (and `targetData` if/when added). Never save `id: ''` etc. —
+  that changes the saved shape and, for `id`, the action-routing fallback.
+- `activation`, `destructive`, `authenticationRequired` are always written.
+
+**Reorder = renumber.** The header shows each action's output number (its index).
+Reordering cards remaps outputs by index (wires stay attached by position), same
+as today — now that the number is displayed prominently, the card header should
+make this legible ("Output N"), but the behavior is unchanged.
 
 ## Backward compatibility & migration
 
@@ -195,10 +272,24 @@ This migrates transparently:
 Existing nodes work correctly **before** re-save too, because the runtime reads
 both keys and `customSound` wins only when non-empty.
 
+Two things the manual verifier should expect (neither is a runtime bug):
+
+- **Load display is one-way, not a round-trip.** A node saved with an *empty*
+  `customSound` re-loads showing `default` (the load rule falls through), not
+  empty — the "Loads as `(empty)`" row above is only the pre-save state. The
+  runtime result is `default` either way.
+- **Expected flow-diff churn on re-save.** Re-saving any existing node after
+  this change rewrites its `customSound`/`customSoundPreInstalled` keys (and a
+  fresh/default node materializes `customSound: 'default'` where `''` was),
+  marking the node modified and dirtying the flow-file diff. This is correct and
+  intended — the save-and-diff verification should treat these specific key
+  rewrites, and the fixed `presentationOptions` ordering, as the *expected*
+  diff, and anything else as a regression.
+
 **Everything else.** All other fields keep their existing keys and value shapes;
 the redesign only changes how they're laid out and which widget renders them.
-`presentationOptions`, `services`, `actions`, map/media keys, badge, Live
-Activity keys — all unchanged.
+`presentationOptions` (same array, fixed order), `services`, `actions`,
+map/media keys, badge, Live Activity keys — all unchanged.
 
 ## Testing
 
@@ -208,23 +299,36 @@ review plus a manual pass in the live Node-RED editor (load an existing node,
 confirm smart-open, confirm each picker, save and diff the config).
 
 The one piece of genuinely testable logic is the sound-value resolution, whose
-backward-compat behavior must be pinned. It is captured as a pure function in
-`lib/` and unit-tested:
+backward-compat behavior must be pinned:
 
 - `soundFieldValue(customSound, customSoundPreInstalled)` → the string to
   display in the combined field, per the load rule above. Tests cover: custom
   wins over preinstalled; preinstalled used when custom empty; `'default'`
   fallback when both empty; `'none'` preserved; non-string inputs handled.
 
-**Browser constraint (explicit).** The Node-RED editor `<script>` runs in the
-browser and cannot `require()` a `lib/` module, so the editor cannot import this
-function directly. The function therefore lives in **two** places: the tested
-`lib/sound-field.js` (the authoritative contract), and a byte-identical inline
-copy in the editor `oneditprepare`. They must stay in sync; the unit test is the
-guard on the contract, and the manual save-and-diff check confirms the editor
-copy behaves the same. This small, deliberate duplication is accepted because
-there is no way to share code across the Node/runtime and browser/editor
-boundary in a Node-RED node. The logic is a few lines and stable.
+**Single-sourced across the runtime/editor boundary (no duplication).** The
+Node-RED editor `<script>` runs in the browser and cannot `require()` a Node
+module — but Node-RED serves a package's `resources/` directory to the editor at
+`resources/node-red-contrib-ha-ios-notification/<file>`. So `soundFieldValue`
+lives in **one** file, `resources/sound-field.js`, written with a small
+dual-export guard:
+
+```js
+(function (root) {
+  function soundFieldValue(customSound, customSoundPreInstalled) { /* … */ }
+  if (typeof module !== 'undefined' && module.exports) module.exports = { soundFieldValue };
+  else root.haIosSoundField = { soundFieldValue };
+})(typeof window !== 'undefined' ? window : this);
+```
+
+The Mocha test `require()`s it directly; the editor loads it once via
+`<script src="resources/node-red-contrib-ha-ios-notification/sound-field.js">`
+in `ha-ios-notification.html` and calls `haIosSoundField.soundFieldValue(...)`
+in `oneditprepare`. One source, unit-tested, no byte-sync discipline. `resources/`
+must be added to `package.json`'s `files` allowlist so it ships. (This function
+is editor-only logic — the node runtime never calls it; it lives in `resources/`
+rather than `lib/` precisely because its consumer is the browser editor, not the
+runtime.)
 
 The save direction (write the field value to `customSound`, reset
 `customSoundPreInstalled` to `'default'`) is trivial editor code, covered by the
@@ -240,12 +344,14 @@ unchanged (it does not touch the `.html`).
   grid, placeholders, merged sound field, tap-to-perform combos with domain
   filtering, content-type combo, segmented foreground control, action cards,
   and the smart-open logic in `oneditprepare`.
-- `ha-ios-notification.js` — no changes required (the `/entities` `prefix` param
-  and `/callable-services` endpoints already exist and already return the data
-  the upgraded pickers need).
-- `lib/sound-field.js` (new) — the `soundFieldValue` pure function (the tested
-  contract; mirrored inline in the editor per the browser constraint above).
+- `ha-ios-notification.js` — no changes required for the pickers (the `/entities`
+  `prefix` param and the `/callable-services` / `/camera-entities` endpoints
+  already exist and return what the upgraded pickers need).
+- `resources/sound-field.js` (new) — the single-sourced `soundFieldValue` (dual
+  export; `require()`d by the test, `<script src>`-loaded by the editor).
 - `test/unit/sound-field.spec.js` (new) — its unit tests.
+- `package.json` — add `resources/` to the `files` allowlist so the resource
+  ships in the published package.
 
 ## Out of scope
 
