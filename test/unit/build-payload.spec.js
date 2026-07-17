@@ -371,3 +371,39 @@ describe('build-payload: media', () => {
     payloads[0].payload.data.data.should.not.have.property('attachment');
   });
 });
+
+describe('build-payload: badge and presentation_options', () => {
+  it('adds no badge or presentation_options when unset', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {});
+    payloads[0].payload.data.data.push.should.not.have.property('badge');
+    payloads[0].payload.data.data.should.not.have.property('presentation_options');
+  });
+
+  it('sets push.badge from config (integer)', () => {
+    const config = baseConfig({ badge: 5 });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.push.badge.should.equal(5);
+  });
+
+  it('honors an explicit badge of 0 (clear-badge count) via nullish precedence', () => {
+    const config = baseConfig({ badge: 3 });
+    const override = { notificationBase: { badge: 0 } };
+    const { payloads } = buildNotificationPayloads(config, override);
+    payloads[0].payload.data.data.push.badge.should.equal(0);
+  });
+
+  it('sets presentation_options array when configured', () => {
+    const config = baseConfig({ presentationOptions: ['alert', 'sound'] });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.presentation_options.should.eql(['alert', 'sound']);
+  });
+
+  it('a per-service override replaces presentation_options', () => {
+    const config = baseConfig({
+      presentationOptions: ['alert'],
+      services: [{ deviceName: 'a', serviceOverride: { notificationBase: { presentationOptions: ['badge'] } } }],
+    });
+    const { payloads } = buildNotificationPayloads(config, {});
+    payloads[0].payload.data.data.presentation_options.should.eql(['badge']);
+  });
+});
