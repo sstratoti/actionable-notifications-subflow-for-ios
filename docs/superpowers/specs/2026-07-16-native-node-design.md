@@ -300,9 +300,13 @@ detail, recorded here so the design of record acknowledges them):
    everything) is wrong — split into `pick` (|| semantics) and `pickNullish` (??).
 2. **Action override = full replace, not merge:** an override supplies the whole action
    object for that id (matching v2), not a shallow field merge.
-3. **Auto-clear must purge tracking state:** on clear-on-action, remove the matching
-   `sentMessages` entries (v2 calls `cleanUpMessages` for every device) — otherwise a
-   duplicate/late action event re-fires routing and a second auto-clear.
+3. **Received-action must purge tracking state (scoped):** always remove the firing
+   device's own `sentMessages` entry so a duplicate/late event for that same tag+device
+   can't re-fire routing (v2 left this entry unless clear-on-action was set — a latent
+   bug). On clear-on-action, *also* remove the other devices' entries for the tag (v2's
+   `cleanUpMessages` for every device), since their notifications were just cleared. With
+   clear-on-action off, leave the other devices' entries so each device can still be
+   actioned independently (matches v2). See Task 17.
 4. **Send-path persistence:** persist `sentMessages` incrementally (or in `finally`) so
    a mid-fan-out failure doesn't silently drop already-sent devices from tracking.
 5. **Rate-limit fidelity + default:** v2 always throttles multi-device fan-out (~5s) on

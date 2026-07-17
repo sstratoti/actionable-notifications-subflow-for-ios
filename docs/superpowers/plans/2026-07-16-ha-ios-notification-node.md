@@ -5,8 +5,10 @@
 > **PLAN REVISION 2 (2026-07-16):** This plan was revised after a full HA Companion App
 > notification-docs review and a design/logic review (see spec Revision 2). Changes to
 > the original 28 tasks are marked **[REV2]** inline in the affected tasks; brand-new
-> work is in Tasks 29–34 and the decimal-inserted tasks (8.5, 15.5). Read the whole task
-> you are on — REV2 notes replace, not merely append to, the surrounding steps they touch.
+> work is in the decimal-inserted tasks (8.5, 19.1, 19.2, 19.3, 19.4, 19.5, 24.5). Read
+> the whole task you are on — REV2 notes replace, not merely append to, the surrounding
+> steps they touch. The plan runs Task 1 → Task 28 with those decimals interleaved in
+> numeric order; there are no Tasks 29+.
 
 **Goal:** Convert the `iOS Actionable Notification v2` Node-RED subflow into a publishable native node package, `node-red-contrib-ha-ios-notification`, with HA entity/service pickers, dynamic actionable-button outputs, per-instance state, modern + legacy action-event support, badge / presentation-options / Live Activities coverage, tap-to-perform action targets, a Mocha + node-red-node-test-helper test suite, docs, and a publish-ready package.
 
@@ -20,10 +22,10 @@
 - Depends on `node-red-contrib-home-assistant-websocket` as a `peerDependency` (range `>=0.70.0`, matching the installed `0.80.3` and the API surface verified in Task 11) — never bundled as a regular `dependency`.
 - `msg.notificationOverride` 3-tier precedence (`serviceOverride` > global `override` > node config default) is preserved exactly, per the design spec's override-compatibility section. Tag never accepts a service-level override (matches v2). **[REV2]** Precedence uses **nullish** semantics (`??`) for every field except the sound chain (which uses `||`, matching v2) — an explicit empty-string override IS honored and must NOT fall through to a lower tier. See Task 5.
 - **[REV2]** An action override supplies the WHOLE action object for its id — full replace, not field-merge (matches v2). See Tasks 3 and 6.
-- All dedup/tracking state lives in `node.context()`, keyed by this node instance only — never `flow.*` or `global.*`. **[REV2]** Two node instances in one flow must never collide — verified by a required test in Task 33.
+- All dedup/tracking state lives in `node.context()`, keyed by this node instance only — never `flow.*` or `global.*`. **[REV2]** Two node instances in one flow must never collide — verified by a required test in Task 19.5.
 - **[REV2]** iOS-only for v1, but the action listener subscribes to BOTH `mobile_app_notification_action` (current) and `ios.notification_action_fired` (legacy/deprecated), normalizing the action-id field (`action` vs `actionName`) to an internal `actionId`. See Tasks 11 and 15.
 - Node engines: `"node": ">=18"`.
-- Test runner: Mocha + should for unit tests; `node-red-node-test-helper` + `proxyquire` for integration tests. No live HA connection in any test. **[REV2]** Integration tests await the input handler via its `done` callback / a returned promise — no `setTimeout`-race assertions, no millisecond-precision timing assertions. See Task 34.
+- Test runner: Mocha + should for unit tests; `node-red-node-test-helper` + `proxyquire` for integration tests. No live HA connection in any test. **[REV2]** Timing discipline: the mocked HA client resolves synchronously (next microtask), so integration tests use a short fixed settle delay to let the async send drain and assert on delivered messages — never on millisecond-precision intervals. Prefer an `on('input')`/`done()` completion hook wherever an output node exists; the settle-delay pattern is only for send/clear paths that produce no output. Any wait that proves flaky under CI is converted to a completion hook rather than lengthened. See the timing note in Task 20.
 - Repo: `sstratoti/actionable-notifications-subflow-for-ios`, restructured in place. Local clone: `/home/steve/Documents/GitHub/actionable-notifications-subflow-for-ios`. All commands below assume this as the working directory unless stated otherwise.
 - Design spec of record: `docs/superpowers/specs/2026-07-16-native-node-design.md` (already committed, includes Revision 2).
 
@@ -293,7 +295,7 @@ emits only `IOS_ACTION_PROPS`).
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `normalizeActions(rawActions): Array<{id, title, outputIndex, ...props}>`, `applyActionOverrides(normalizedActions, overridesById): Array<...>`, `IOS_ACTION_PROPS: string[]` (the 8 props emitted to iOS), `TAP_TARGET_PROPS: string[]` (node-side tap-to-perform props) — consumed by Task 6 (`lib/build-payload.js`, emits `IOS_ACTION_PROPS` only) and Tasks 12/15/15.5 (node runtime — output count, and tap-to-perform via `TAP_TARGET_PROPS`).
+- Produces: `normalizeActions(rawActions): Array<{id, title, outputIndex, ...props}>`, `applyActionOverrides(normalizedActions, overridesById): Array<...>`, `IOS_ACTION_PROPS: string[]` (the 8 props emitted to iOS), `TAP_TARGET_PROPS: string[]` (node-side tap-to-perform props) — consumed by Task 6 (`lib/build-payload.js`, emits `IOS_ACTION_PROPS` only) and Tasks 12/15/19.2 (node runtime — output count, and tap-to-perform via `TAP_TARGET_PROPS`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1304,7 +1306,7 @@ Task 26.)
 - Produces: `payload.data.data.{image,video,audio}` directly, and
   `payload.data.data.attachment.{url, content-type, lazy, hide-thumbnail}` when any of
   those are set. Task 8.5 adds badge + presentation_options to the same file; Live
-  Activities gets its own separate builder in Task 31.
+  Activities gets its own separate builder in Task 19.3.
 
 - [ ] **Step 1: Append the failing tests**
 
@@ -1490,7 +1492,9 @@ Expected: FAIL — `badge`/`presentation_options` are never set.
 
 In `lib/build-payload.js`, inside the map callback, compute the two values alongside the
 other base fields (badge uses nullish precedence so an explicit `0` is honored;
-`presentation_options` uses `firstDefined` so an explicit `[]` is honored):
+`presentation_options` resolves the highest-precedence array, then an empty array is
+treated as "none configured" and the key is omitted — the editor's checkbox group can't
+distinguish "unset" from "all boxes unchecked", so an empty selection means don't emit):
 
 ```js
     const badge = pickNullish(nb.badge, ovNb.badge, config.badge);
@@ -1767,7 +1771,7 @@ git commit -m "feat: add auto-clear-on-action payload builder"
 
 **Interfaces:**
 - Consumes: `node-red-contrib-home-assistant-websocket/dist/homeAssistant` (`getHomeAssistant`) — verified against the installed `0.80.3` source at `/home/steve/Documents/docker/hosted-external/node-red/volumes/user/node_modules/node-red-contrib-home-assistant-websocket/dist/homeAssistant/index.js` and `HomeAssistant.js`.
-- Produces: `connect(serverConfigNode)`, `subscribeToActionEvents(homeAssistant, subscriberId, handler)`, `unsubscribeFromActionEvents(homeAssistant, subscriberId, handler)`, `sendNotification(homeAssistant, deviceName, serviceData)`, `callAction(homeAssistant, domain, service, data, target)`, `fetchUsers(homeAssistant)`, `getNotifyTargets(homeAssistant)`, `getEntities(homeAssistant, prefix)`, `getCameraEntities(homeAssistant)`, `getCallableServices(homeAssistant)`, `ACTION_EVENT_TYPES`, `actionBusName(eventType)` — consumed by Task 12 (node registration) and Tasks 13–17, 15.5 (all runtime behaviors), and by Tasks 21/22/30 (picker admin endpoints).
+- Produces: `connect(serverConfigNode)`, `subscribeToActionEvents(homeAssistant, subscriberId, handler)`, `unsubscribeFromActionEvents(homeAssistant, subscriberId, handler)`, `sendNotification(homeAssistant, deviceName, serviceData)`, `callAction(homeAssistant, domain, service, data, target)`, `fetchUsers(homeAssistant)`, `getNotifyTargets(homeAssistant)`, `getEntities(homeAssistant, prefix)`, `getCameraEntities(homeAssistant)`, `getCallableServices(homeAssistant)`, `ACTION_EVENT_TYPES`, `actionBusName(eventType)` — consumed by Task 12 (node registration) and Tasks 13–17, 19.2 (all runtime behaviors), and by Tasks 21/22/19.2 (picker admin endpoints).
 
 Not unit-tested directly (it's a thin wrapper over a live external client with no pure logic of its own) — exercised by the integration tests in Tasks 12–17 via a `proxyquire`-injected fake.
 
@@ -2071,7 +2075,7 @@ module.exports = function (RED) {
       presentationOptions: Array.isArray(config.presentationOptions) ? config.presentationOptions : [],
       // [REV2] stagger between per-device sends; default non-zero (protects APNs, see Task 18)
       staggerMs: config.staggerMs === undefined || config.staggerMs === '' ? 1000 : Number(config.staggerMs),
-      // [REV2] Live Activity mode + its fields (see Task 31)
+      // [REV2] Live Activity mode + its fields (see Task 19.3)
       liveActivity: !!config.liveActivity,
       progress: config.progress === undefined || config.progress === '' ? undefined : Number(config.progress),
       progressMax: config.progressMax === undefined || config.progressMax === '' ? undefined : Number(config.progressMax),
@@ -2482,7 +2486,7 @@ git commit -m "feat: implement manual clear-notification path"
 
 **Interfaces:**
 - Consumes: `haClient.subscribeToActionEvents`/`unsubscribeFromActionEvents` (Task 11), `lib/message-store.js` `findMatch` (Task 4), `node.actions` (Task 12, for output-index lookup by action id).
-- Produces: `normalizeActionId(eventPayload)` (module scope) and the action-received handler. **[REV2]** When EITHER `mobile_app_notification_action` OR `ios.notification_action_fired` fires and its `action_data.tag`+`deviceName` matches this node's own `sentMessages`, sends on the output whose configured action id equals the normalized action id (`event.event.action ?? event.event.actionName`), and sets `msg.actionId` to that normalized id. Non-matching events (a different node instance's, or another platform's) are silently ignored — the multi-instance safety mechanism. Consumed by Task 15.5 (tap-to-perform), 16 (user-info), 17 (auto-clear), 19 (debug).
+- Produces: `normalizeActionId(eventPayload)` (module scope) and the action-received handler. **[REV2]** When EITHER `mobile_app_notification_action` OR `ios.notification_action_fired` fires and its `action_data.tag`+`deviceName` matches this node's own `sentMessages`, sends on the output whose configured action id equals the normalized action id (`event.event.action ?? event.event.actionName`), and sets `msg.actionId` to that normalized id. Non-matching events (a different node instance's, or another platform's) are silently ignored — the multi-instance safety mechanism. Consumed by Task 19.2 (tap-to-perform), 16 (user-info), 17 (auto-clear), 19 (debug).
 
 - [ ] **Step 1: Append the failing tests**
 
@@ -2981,6 +2985,43 @@ describe('auto-clear on action', () => {
       }, 20);
     });
   });
+
+  it('[REV2] with clear-on-action OFF, drops only the firing device and keeps the others actionable', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], isClearNotificationsOnAction: false,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        mock.emitFakeActionEvent({
+          event: {
+            action: '1',
+            action_data: {
+              tag: 'FRONT_DOOR', deviceName: 'my_iphone',
+              allServices: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
+              clearNotificationsOnAction: false,
+            },
+          },
+          context: { user_id: 'user-123' },
+        });
+        setTimeout(() => {
+          const stored = n1.context().get('sentMessages') || [];
+          stored.should.have.length(1);
+          stored[0].deviceName.should.equal('my_ipad'); // firing device dropped, other kept
+          done();
+        }, 30);
+      }, 20);
+    });
+  });
 });
 ```
 
@@ -2997,7 +3038,7 @@ Add to the requires:
 const { buildAutoClearPayloads } = require('./lib/build-clear-payload');
 ```
 
-In `handleActionReceived`, after sending the output message (after `node.send(outputs);`), add. **[REV2]** After the clear calls, purge the tracking-store entries for this tag on **every** device in `allServices` (including the firing device) — mirroring v2's `cleanUpMessages`, so a duplicate/late action event for the same tag+device can't re-fire routing or a second auto-clear:
+In `handleActionReceived`, after sending the output message (after `node.send(outputs);`), add. **[REV2]** State cleanup is scoped to match v2 while closing a v2 quirk. Always remove the **firing device's own** tracking entry for this tag, so a duplicate/late event for that same tag+device can't re-fire routing (v2 left this entry in place unless clear-on-action was set — a latent bug). Only when `clearNotificationsOnAction` is set do we *also* remove the other devices' entries — because their notifications were just cleared (mirroring v2's `cleanUpMessages`). When clear-on-action is OFF, the other devices' notifications are still on-screen, so their entries stay so each device can be actioned independently (v2 behavior):
 
 ```js
     if (eventPayload.action_data.clearNotificationsOnAction) {
@@ -3011,13 +3052,18 @@ In `handleActionReceived`, after sending the output message (after `node.send(ou
       }
     }
 
-    // [REV2] State cleanup on any received action: remove this tag's tracking entries
-    // for every device in allServices (matches v2's cleanUpMessages), so duplicate/late
-    // events for the same notification can't re-trigger routing or auto-clear.
+    // [REV2] State cleanup. Always drop the firing device's own entry (dedup guard for
+    // duplicate/late events on the same tag+device). Under clear-on-action, also drop the
+    // OTHER devices' entries for this tag — their notifications were just cleared (matches
+    // v2's cleanUpMessages). With clear-on-action OFF, leave the others so each device can
+    // still be actioned independently (v2 behavior).
     let after = node.context().get('sentMessages') || [];
-    (eventPayload.action_data.allServices || [{ deviceName }]).forEach((svc) => {
-      if (svc && svc.deviceName) after = messageStore.removeMatch(after, tag, svc.deviceName);
-    });
+    after = messageStore.removeMatch(after, tag, deviceName);
+    if (eventPayload.action_data.clearNotificationsOnAction) {
+      (eventPayload.action_data.allServices || []).forEach((svc) => {
+        if (svc && svc.deviceName) after = messageStore.removeMatch(after, tag, svc.deviceName);
+      });
+    }
     node.context().set('sentMessages', after);
 ```
 
@@ -3033,7 +3079,7 @@ require is needed beyond `buildAutoClearPayloads`.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 14 passing
+Expected: PASS — 15 passing
 
 - [ ] **Step 5: Commit**
 
@@ -3179,7 +3225,7 @@ In the `defaults` object, add (**[REV2]** default 1000, matching `normalizeNodeC
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 17 passing
+Expected: PASS — 18 passing
 
 - [ ] **Step 6: Commit**
 
@@ -3317,7 +3363,7 @@ to:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 19 passing
+Expected: PASS — 20 passing
 
 - [ ] **Step 5: Commit**
 
@@ -3439,7 +3485,7 @@ Add the handler at module scope:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 21 passing
+Expected: PASS — 22 passing
 
 - [ ] **Step 5: Commit**
 
@@ -3600,7 +3646,7 @@ Near the other `RED.httpAdmin.get` registrations (added in Tasks 21–22), add:
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 23 passing
+Expected: PASS — 24 passing
 
 - [ ] **Step 6: Commit**
 
@@ -3903,7 +3949,7 @@ config):
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 25 passing
+Expected: PASS — 26 passing
 
 - [ ] **Step 5: Commit**
 
@@ -3985,7 +4031,7 @@ describe('multi-instance isolation', () => {
 - [ ] **Step 2: Run the test**
 
 Run: `npx mocha test/integration/ha-ios-notification.spec.js`
-Expected: PASS — 26 passing. (If it FAILS with `h2Got === true`, the tracking store is
+Expected: PASS — 27 passing. (If it FAILS with `h2Got === true`, the tracking store is
 leaking across instances — a Task 4 / Task 13 regression — fix before proceeding.)
 
 - [ ] **Step 3: Commit**
@@ -4011,7 +4057,7 @@ git commit -m "test: verify per-instance tracking isolation across two node inst
 Run: `npm test`
 Expected: all unit + integration tests pass. **[REV2] Target totals:** unit ≈ 84
 (sanitize-tag 7, action-list 13, message-store 8, build-payload 39, build-clear-payload
-8, build-live-activity 9); integration = 26. Grand total ≈ 110. Reconcile the exact
+8, build-live-activity 9); integration = 27. Grand total ≈ 111. Reconcile the exact
 count against what actually accumulated and fix any test that regressed from a later
 task's refactor. **[REV2] Timing note:** the two `staggerMs` timing tests (Task 18) use
 generous margins by design; all other integration tests assert on delivered messages via
@@ -4114,7 +4160,8 @@ Expected once run: `{"targets": ["my_iphone", "my_ipad", ...]}` matching Steve's
       audioPath: { value: '' },
       lazyLoading: { value: false },
       hideThumbnail: { value: false },
-      staggerMs: { value: 0 },
+      contentType: { value: '' },
+      staggerMs: { value: 1000 },
       debugMode: { value: false },
     },
     inputs: 1,
@@ -4435,6 +4482,10 @@ git commit -m "feat: add dynamic actions editor list"
   <div class="form-row">
     <label for="node-input-contentUrl">Content URL (overrides image/video/audio)</label>
     <input type="text" id="node-input-contentUrl">
+  </div>
+  <div class="form-row">
+    <label for="node-input-contentType">Content Type (optional, e.g. jpeg)</label>
+    <input type="text" id="node-input-contentType" placeholder="jpeg">
   </div>
   <div class="form-row">
     <input type="checkbox" id="node-input-lazyLoading" style="width:auto">
@@ -5304,6 +5355,6 @@ the ~10 s sequencing delay with migration notes).
   `msg.actionId`); Tasks 17, 19, 19.2 append/modify against that exact version (verified:
   the `outMsg` line they reference includes `actionId`).
 - **Integration-test counts** are cumulative in one spec file; the per-task "N passing"
-  values were re-tallied after REV2 additions (12→…→19 through Task 19; 21, 23, 25, 26
-  through Tasks 19.1–19.5). Task 20 states the authoritative totals (≈84 unit, 26
+  values were re-tallied after REV2 additions (12→…→20 through Task 19; 22, 24, 26, 27
+  through Tasks 19.1–19.5). Task 20 states the authoritative totals (≈84 unit, 27
   integration) and instructs reconciling against the live runner.
