@@ -86,6 +86,30 @@
       }
       $('#node-input-server').on('change', loadCameraEntities);
       setTimeout(loadCameraEntities, 100);
+
+      const $actionsList = $('#node-input-actions-container').editableList({
+        addItem: function (container, index, data) {
+          container.css({ overflow: 'hidden' });
+          const row1 = $('<div style="display:flex; gap:8px; margin-bottom:4px;">').appendTo(container);
+          $('<input type="text" placeholder="Title" style="flex:2;">').val(data.title || '').appendTo(row1).addClass('action-title');
+          $('<input type="text" placeholder="id (optional)" style="flex:1;">').val(data.id || '').appendTo(row1).addClass('action-id');
+
+          const row2 = $('<div style="display:flex; gap:8px; margin-bottom:4px;">').appendTo(container);
+          const modeSelect = $('<select class="action-activationMode" style="flex:1;">').appendTo(row2);
+          ['foreground', 'background'].forEach((m) => modeSelect.append(`<option value="${m}">${m}</option>`));
+          modeSelect.val(data.activationMode || 'foreground');
+          $('<input type="text" placeholder="URI (optional)" style="flex:2;">').val(data.uri || '').appendTo(row2).addClass('action-uri');
+
+          const row3 = $('<div style="display:flex; gap:12px;">').appendTo(container);
+          const destructive = $('<label style="font-weight:normal;"><input type="checkbox" class="action-destructive"> Destructive</label>').appendTo(row3);
+          if (data.destructive) destructive.find('input').prop('checked', true);
+          const authRequired = $('<label style="font-weight:normal;"><input type="checkbox" class="action-authenticationRequired"> Requires auth</label>').appendTo(row3);
+          if (data.authenticationRequired) authRequired.find('input').prop('checked', true);
+        },
+        sortable: true,
+        removable: true,
+      });
+      (node.actions || []).forEach((a) => $actionsList.editableList('addItem', a));
     },
     oneditsave: function () {
       const services = [];
@@ -96,7 +120,23 @@
         }
       });
       this.services = services;
-      this.outputs = (this.actions || []).length;
+
+      const actions = [];
+      $('#node-input-actions-container').editableList('items').each(function () {
+        const title = $(this).find('.action-title').val();
+        if (!title) return;
+        const action = { title };
+        const id = $(this).find('.action-id').val();
+        if (id) action.id = id;
+        action.activationMode = $(this).find('.action-activationMode').val();
+        const uri = $(this).find('.action-uri').val();
+        if (uri) action.uri = uri;
+        action.destructive = $(this).find('.action-destructive').prop('checked');
+        action.authenticationRequired = $(this).find('.action-authenticationRequired').prop('checked');
+        actions.push(action);
+      });
+      this.actions = actions;
+      this.outputs = actions.length;
     },
   });
 </script>
@@ -148,7 +188,13 @@
     <datalist id="node-input-cameraEntity-list"></datalist>
   </div>
 
-  <!-- Actions / Map / Media / Advanced sections added in Tasks 23-24 -->
+  <h4>Actions</h4>
+  <div class="form-row">
+    <label>Actionable Buttons</label>
+    <ol id="node-input-actions-container"></ol>
+  </div>
+
+  <!-- Map / Media / Advanced sections added in Task 24 -->
 </script>
 
 <script type="text/html" data-help-name="ha-ios-notification">
