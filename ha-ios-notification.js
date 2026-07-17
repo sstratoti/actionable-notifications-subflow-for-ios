@@ -7,6 +7,10 @@ const { buildManualClearPayloads, buildAutoClearPayloads } = require('./lib/buil
 const messageStore = require('./lib/message-store');
 const { findMatch } = require('./lib/message-store');
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 module.exports = function (RED) {
   function normalizeNodeConfig(config) {
     return {
@@ -114,7 +118,8 @@ module.exports = function (RED) {
       const now = Date.now();
       let stored = node.context().get('sentMessages') || [];
 
-      for (const item of payloads) {
+      for (let i = 0; i < payloads.length; i += 1) {
+        const item = payloads[i];
         await haClient.sendNotification(node.homeAssistant, item.service.deviceName, item.payload.data);
         stored = messageStore.recordSent(stored, {
           tag: item.tag,
@@ -125,6 +130,11 @@ module.exports = function (RED) {
         // [REV2] persist after EACH successful send, so a mid-fan-out failure never
         // silently drops an already-delivered device from the tracking store.
         node.context().set('sentMessages', stored);
+        // [REV2] stagger per-device sends to avoid slamming APNs/HA; not applied
+        // after the final send (see Task 18).
+        if (node.nodeConfig.staggerMs > 0 && i < payloads.length - 1) {
+          await delay(node.nodeConfig.staggerMs);
+        }
       }
 
       node.status({ text: `sent to ${payloads.length} service(s)`, shape: 'dot', fill: 'green' });

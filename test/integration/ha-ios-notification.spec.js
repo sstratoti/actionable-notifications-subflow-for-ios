@@ -53,6 +53,12 @@ describe('send path', () => {
         id: 'n1', type: 'ha-ios-notification', server: 'server1',
         services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }],
         title: 'Test', message: 'Hello', actions: [],
+        // [DEVIATION from task-13-brief.md, surfaced by task-18-brief.md] This test
+        // predates staggerMs (Task 18) and asserts both sends land almost immediately.
+        // Task 18 made the default stagger 1000ms, which would push the second send
+        // past this test's 20ms check window. Set staggerMs: 0 to preserve the
+        // original intent (send count / status), since this test isn't about timing.
+        staggerMs: 0,
         wires: [],
       },
     ];
@@ -486,6 +492,13 @@ describe('auto-clear on action', () => {
         id: 'n1', type: 'ha-ios-notification', server: 'server1',
         services: [{ deviceName: 'my_iphone' }, { deviceName: 'my_ipad' }], tag: 'front-door',
         actions: [{ title: 'Open' }], isClearNotificationsOnAction: false,
+        // [DEVIATION from task-17-brief.md, surfaced by task-18-brief.md] This test
+        // predates staggerMs (Task 18) and asserts both devices are recorded in
+        // sentMessages by the 20ms mark before the action event fires. Task 18 made
+        // the default stagger 1000ms, which would leave the second send unrecorded at
+        // that point. Set staggerMs: 0 to preserve the original intent (ownership
+        // cleanup logic), since this test isn't about timing.
+        staggerMs: 0,
         wires: [['n2']],
       },
       { id: 'n2', type: 'helper' },
@@ -512,6 +525,75 @@ describe('auto-clear on action', () => {
           done();
         }, 30);
       }, 20);
+    });
+  });
+});
+
+describe('rate limiting', () => {
+  // [DEVIATION from task-18-brief.md] The brief's literal test text has no afterEach
+  // hook in this describe block. Every sibling top-level describe block in this file
+  // carries the identical hook (see `describe('send path', ...)` above) because
+  // node-red-node-test-helper reuses node id 'n1' across tests; without unloading
+  // between tests, the next helper.load() never invokes its ready callback and the
+  // test hangs to the mocha timeout.
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('waits staggerMs between each per-device send when configured', function (done) {
+    const timestamps = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async () => { timestamps.push(Date.now()); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'a' }, { deviceName: 'b' }], staggerMs: 100, actions: [], wires: [],
+      },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        timestamps.should.have.length(2);
+        // generous lower bound — asserts "staggered", not an exact interval
+        (timestamps[1] - timestamps[0]).should.be.aboveOrEqual(70);
+        done();
+      }, 300);
+    });
+  });
+
+  it('[REV2] does not wait between sends when staggerMs is explicitly 0', function (done) {
+    const timestamps = [];
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant({
+      callService: async () => { timestamps.push(Date.now()); return {}; },
+    });
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }, { deviceName: 'b' }], staggerMs: 0, actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        timestamps.should.have.length(2);
+        (timestamps[1] - timestamps[0]).should.be.below(50);
+        done();
+      }, 100);
+    });
+  });
+
+  it('[REV2] staggers by default (staggerMs unset -> 1000ms) — asserts config default, not timing', function (done) {
+    const { nodeUnderTest } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      { id: 'n1', type: 'ha-ios-notification', server: 'server1', services: [{ deviceName: 'a' }], actions: [], wires: [] },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      n1.nodeConfig.staggerMs.should.equal(1000);
+      done();
     });
   });
 });
