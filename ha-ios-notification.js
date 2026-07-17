@@ -5,6 +5,7 @@ const haClient = require('./lib/ha-client');
 const { buildNotificationPayloads } = require('./lib/build-payload');
 const { buildManualClearPayloads } = require('./lib/build-clear-payload');
 const messageStore = require('./lib/message-store');
+const { findMatch } = require('./lib/message-store');
 
 module.exports = function (RED) {
   function normalizeNodeConfig(config) {
@@ -71,6 +72,21 @@ module.exports = function (RED) {
     node.outputCount = node.actions.length;
 
     node.homeAssistant = node.serverConfig ? haClient.connect(node.serverConfig) : null;
+
+    node.actionHandler = function (event) {
+      handleActionReceived(node, event);
+    };
+
+    if (node.homeAssistant) {
+      haClient.subscribeToActionEvents(node.homeAssistant, node.id, node.actionHandler);
+    }
+
+    node.on('close', function (removed, done) {
+      if (node.homeAssistant) {
+        haClient.unsubscribeFromActionEvents(node.homeAssistant, node.id, node.actionHandler);
+      }
+      done();
+    });
 
     node.on('input', function (msg, send, done) {
       send = send || function () { node.send.apply(node, arguments); };
@@ -143,6 +159,42 @@ module.exports = function (RED) {
       node.error(err, msg);
       done(err);
     }
+  }
+
+  // [REV2] Normalize the action id across both event shapes: the modern
+  // mobile_app_notification_action carries `action`; the legacy
+  // ios.notification_action_fired carries `actionName`.
+  function normalizeActionId(eventPayload) {
+    const raw = eventPayload.action !== undefined && eventPayload.action !== null
+      ? eventPayload.action
+      : eventPayload.actionName;
+    return raw === undefined || raw === null ? undefined : String(raw);
+  }
+
+  function handleActionReceived(node, event) {
+    const eventPayload = event && event.event;
+    if (!eventPayload || !eventPayload.action_data) return;
+
+    const { tag, deviceName } = eventPayload.action_data;
+    if (!tag || !deviceName) return;
+
+    const stored = node.context().get('sentMessages') || [];
+    const owned = findMatch(stored, tag, deviceName);
+    if (!owned) return; // belongs to a different node instance — ignore
+
+    const actionId = normalizeActionId(eventPayload);
+    if (actionId === undefined) return;
+
+    const actionIndex = node.actions.findIndex((a, i) => {
+      const id = a.id !== undefined && a.id !== null && a.id !== '' ? String(a.id) : String(i + 1);
+      return id === actionId;
+    });
+    if (actionIndex === -1) return;
+
+    const outputs = new Array(node.outputCount).fill(null);
+    outputs[actionIndex] = { payload: event, actionId, matchedMessage: owned.message };
+    node.status({ text: `action ${actionId} received`, shape: 'dot', fill: 'green' });
+    node.send(outputs);
   }
 
   RED.nodes.registerType('ha-ios-notification', HaIosNotificationNode);

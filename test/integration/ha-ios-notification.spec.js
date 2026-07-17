@@ -168,3 +168,149 @@ describe('manual clear path', () => {
     });
   });
 });
+
+describe('action-received handling', () => {
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('routes a received action to the output matching its configured id', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }, { title: 'Ignore' }],
+        wires: [['n2'], ['n3']],
+      },
+      { id: 'n2', type: 'helper' },
+      { id: 'n3', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} }); // send, so the tracked entry exists to match against
+
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          msg.payload.event.actionName.should.equal('1');
+          done();
+        });
+
+        mock.emitFakeActionEvent({
+          event: {
+            actionName: '1',
+            action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+          },
+          context: { user_id: 'user-123' },
+        });
+      }, 20);
+    });
+  });
+
+  it('ignores an action event whose tag/device does not belong to this node instance', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }],
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        let received = false;
+        n2.on('input', () => { received = true; });
+
+        mock.emitFakeActionEvent({
+          event: {
+            actionName: '1',
+            action_data: { tag: 'SOME_OTHER_TAG', deviceName: 'someone_elses_device', allServices: [] },
+          },
+          context: { user_id: 'user-123' },
+        });
+
+        setTimeout(() => {
+          received.should.equal(false);
+          done();
+        }, 20);
+      }, 20);
+    });
+  });
+
+  it('[REV2] routes via the modern `action` field on mobile_app_notification_action', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          msg.actionId.should.equal('1');
+          done();
+        });
+        mock.emitFakeActionEvent(
+          {
+            event: {
+              action: '1', // modern field name
+              action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+            },
+            context: { user_id: 'user-123' },
+          },
+          'mobile_app_notification_action'
+        );
+      }, 20);
+    });
+  });
+
+  it('[REV2] routes via the legacy `actionName` field on ios.notification_action_fired', function (done) {
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant();
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          msg.actionId.should.equal('1');
+          done();
+        });
+        mock.emitFakeActionEvent(
+          {
+            event: {
+              actionName: '1', // legacy field name
+              action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }] },
+            },
+            context: { user_id: 'user-123' },
+          },
+          'ios.notification_action_fired'
+        );
+      }, 20);
+    });
+  });
+});
