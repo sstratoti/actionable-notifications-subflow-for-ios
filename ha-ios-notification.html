@@ -1,0 +1,51 @@
+<!-- ha-ios-notification.html -->
+<script type="text/javascript">
+  RED.nodes.registerType('ha-ios-notification', {
+    category: 'home_assistant',
+    color: '#C7E9C0',
+    defaults: {
+      name: { value: '' },
+      server: { value: '', type: 'server' },
+      tag: { value: '' },
+      services: { value: [] },
+      group: { value: '' },
+      title: { value: '' },
+      subtitle: { value: '' },
+      message: { value: '' },
+      notificationUrl: { value: '' },
+      cameraEntity: { value: '' },
+      customSoundPreInstalled: { value: 'default' },
+      customSound: { value: '' },
+      interruptionLevel: { value: 'active' },
+      userInfo: { value: false },
+      isClearNotificationsOnAction: { value: false },
+      actions: { value: [] },
+      firstLatitude: { value: '' },
+      firstLongitude: { value: '' },
+      secondLatitude: { value: '' },
+      secondLongitude: { value: '' },
+      showLineBetweenPoints: { value: false },
+      showCompass: { value: false },
+      showPointsOfInterest: { value: false },
+      showScale: { value: false },
+      showTraffic: { value: false },
+      showUserLocation: { value: false },
+      contentUrl: { value: '' },
+      imagePath: { value: '' },
+      videoPath: { value: '' },
+      audioPath: { value: '' },
+      lazyLoading: { value: false },
+      hideThumbnail: { value: false },
+      debugMode: { value: false },
+    },
+    inputs: 1,
+    outputs: 0,
+    icon: 'font-awesome/fa-mobile-phone',
+    label: function () {
+      return this.name || 'HA iOS Notification';
+    },
+    oneditsave: function () {
+      this.outputs = (this.actions || []).length;
+    },
+  });
+</script>
