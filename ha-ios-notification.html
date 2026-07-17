@@ -39,6 +39,19 @@
       contentType: { value: '' },
       staggerMs: { value: 1000 },
       debugMode: { value: false },
+      badge: { value: '' },
+      presentationOptions: { value: [] },
+      liveActivity: { value: false },
+      progress: { value: '' },
+      progressMax: { value: '' },
+      chronometer: { value: false },
+      when: { value: '' },
+      whenRelative: { value: false },
+      notificationIcon: { value: '' },
+      notificationIconColor: { value: '' },
+      color: { value: '' },
+      backgroundColor: { value: '' },
+      textColor: { value: '' },
     },
     inputs: 1,
     outputs: 0,
@@ -105,11 +118,36 @@
           if (data.destructive) destructive.find('input').prop('checked', true);
           const authRequired = $('<label style="font-weight:normal;"><input type="checkbox" class="action-authenticationRequired"> Requires auth</label>').appendTo(row3);
           if (data.authenticationRequired) authRequired.find('input').prop('checked', true);
+
+          const row4 = $('<div style="display:flex; gap:8px; margin-top:4px;">').appendTo(container);
+          const svc = $('<input type="text" placeholder="Tap-to-perform service (optional, e.g. lock.unlock)" style="flex:2;" list="ha-ios-services">')
+            .val(data.targetService || '').appendTo(row4).addClass('action-targetService');
+          $('<input type="text" placeholder="Target entity (optional)" style="flex:2;" list="ha-ios-entities">')
+            .val(data.targetEntityId || '').appendTo(row4).addClass('action-targetEntityId');
         },
         sortable: true,
         removable: true,
       });
       (node.actions || []).forEach((a) => $actionsList.editableList('addItem', a));
+
+      function loadServiceAndEntityLists() {
+        const serverId = $('#node-input-server').val();
+        if (!serverId) return;
+        $.getJSON('ha-ios-notification/callable-services', { server: serverId }, function (r) {
+          const $l = $('#ha-ios-services').empty();
+          (r.services || []).forEach((s) => $l.append(`<option value="${s}">`));
+        });
+        $.getJSON('ha-ios-notification/entities', { server: serverId }, function (r) {
+          const $l = $('#ha-ios-entities').empty();
+          (r.entities || []).forEach((e) => $l.append(`<option value="${e}">`));
+        });
+      }
+      $('#node-input-server').on('change', loadServiceAndEntityLists);
+      setTimeout(loadServiceAndEntityLists, 100);
+
+      (node.presentationOptions || []).forEach((v) => {
+        $(`.presopt[value="${v}"]`).prop('checked', true);
+      });
     },
     oneditsave: function () {
       const services = [];
@@ -133,10 +171,16 @@
         if (uri) action.uri = uri;
         action.destructive = $(this).find('.action-destructive').prop('checked');
         action.authenticationRequired = $(this).find('.action-authenticationRequired').prop('checked');
+        const targetService = $(this).find('.action-targetService').val();
+        if (targetService) action.targetService = targetService;
+        const targetEntityId = $(this).find('.action-targetEntityId').val();
+        if (targetEntityId) action.targetEntityId = targetEntityId;
         actions.push(action);
       });
       this.actions = actions;
       this.outputs = actions.length;
+
+      this.presentationOptions = $('.presopt:checked').map(function () { return this.value; }).get();
     },
   });
 </script>
@@ -193,6 +237,8 @@
     <label>Actionable Buttons</label>
     <ol id="node-input-actions-container"></ol>
   </div>
+  <datalist id="ha-ios-services"></datalist>
+  <datalist id="ha-ios-entities"></datalist>
 
   <h4>Map</h4>
   <div class="form-row">
@@ -288,6 +334,45 @@
   <div class="form-row">
     <input type="checkbox" id="node-input-debugMode" style="width:auto">
     <label for="node-input-debugMode" style="width:auto">Debug mode</label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-badge">Badge count (optional)</label>
+    <input type="number" id="node-input-badge" min="0" step="1">
+  </div>
+  <div class="form-row">
+    <label>Foreground presentation</label>
+    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="alert"> Alert</label>
+    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="badge"> Badge</label>
+    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="sound"> Sound</label>
+  </div>
+
+  <h4>Live Activity (iOS 17.2+, HA Core 2026.7+)</h4>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-liveActivity" style="width:auto">
+    <label for="node-input-liveActivity" style="width:auto">Send as a Live Activity (live_update)</label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-progress">Progress / Max</label>
+    <input type="number" id="node-input-progress" style="width:45%" placeholder="progress">
+    <input type="number" id="node-input-progressMax" style="width:45%" placeholder="max">
+  </div>
+  <div class="form-row">
+    <input type="checkbox" id="node-input-chronometer" style="width:auto">
+    <label for="node-input-chronometer" style="width:auto">Chronometer</label>
+    <input type="number" id="node-input-when" placeholder="when (s)" style="width:30%; margin-left:8px;">
+    <input type="checkbox" id="node-input-whenRelative" style="width:auto; margin-left:8px;">
+    <label for="node-input-whenRelative" style="width:auto">relative</label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-notificationIcon">Icon / Icon color</label>
+    <input type="text" id="node-input-notificationIcon" style="width:45%" placeholder="mdi:washing-machine">
+    <input type="text" id="node-input-notificationIconColor" style="width:45%" placeholder="#2196F3">
+  </div>
+  <div class="form-row">
+    <label for="node-input-color">Accent / BG / Text color</label>
+    <input type="text" id="node-input-color" style="width:30%" placeholder="accent">
+    <input type="text" id="node-input-backgroundColor" style="width:30%" placeholder="bg">
+    <input type="text" id="node-input-textColor" style="width:30%" placeholder="text">
   </div>
 </script>
 
