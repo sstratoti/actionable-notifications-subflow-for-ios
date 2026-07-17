@@ -355,9 +355,26 @@
       $('#node-input-server').on('change', loadServiceAndEntityLists);
       setTimeout(loadServiceAndEntityLists, 100);
 
-      (node.presentationOptions || []).forEach((v) => {
-        $(`.presopt[value="${v}"]`).prop('checked', true);
+      // Sound: single field resolved from the two legacy keys on load.
+      $('#ha-sound-input').val(window.haIosSoundField.soundFieldValue(node.customSound, node.customSoundPreInstalled));
+      var haSoundOptions = $('#ha-sound-options option').map(function () {
+        return { label: this.value, value: this.value };
+      }).get();
+      haCombo($('#ha-sound-input'), function (term) {
+        var t = term.toLowerCase();
+        return haSoundOptions.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
       });
+
+      // Foreground segmented control: pre-press from saved presentationOptions.
+      (node.presentationOptions || []).forEach(function (v) {
+        $('#ha-foreground .ha-seg-btn[data-value="' + v + '"]').attr('aria-pressed', 'true').find('.ha-seg-check').html('&#10003;');
+      });
+      window.__haSegToggle = function (btn) {
+        var $b = $(btn);
+        var on = $b.attr('aria-pressed') === 'true';
+        $b.attr('aria-pressed', on ? 'false' : 'true');
+        $b.find('.ha-seg-check').html(on ? '' : '&#10003;');
+      };
 
       haApplySmartOpen();
     },
@@ -394,7 +411,14 @@
       this.actions = actions;
       this.outputs = actions.length;
 
-      this.presentationOptions = $('.presopt:checked').map(function () { return this.value; }).get();
+      // Sound: single field → customSound; reset the legacy dropdown key.
+      this.customSound = ($('#ha-sound-input').val() || '').trim();
+      this.customSoundPreInstalled = 'default';
+
+      // Foreground: emit in fixed order so re-saves don't churn the flow file.
+      this.presentationOptions = ['alert', 'badge', 'sound'].filter(function (v) {
+        return $('#ha-foreground .ha-seg-btn[data-value="' + v + '"]').attr('aria-pressed') === 'true';
+      });
     },
   });
 </script>
@@ -531,179 +555,187 @@
       <span class="ha-s-sub">sound, delivery, badge</span>
     </div>
     <div class="ha-section-body">
-  <div class="form-row">
-    <label for="node-input-customSoundPreInstalled">Sound (bundled)</label>
-    <select id="node-input-customSoundPreInstalled">
-      <option value="default">default</option>
-      <option value="none">No Sound</option>
-      <option value="US-EN-Alexa-Back-Door-Opened.wav">US-EN-Alexa-Back-Door-Opened.wav</option>
-      <option value="US-EN-Alexa-Back-Door-Unlocked.wav">US-EN-Alexa-Back-Door-Unlocked.wav</option>
-      <option value="US-EN-Alexa-Basement-Door-Opened.wav">US-EN-Alexa-Basement-Door-Opened.wav</option>
-      <option value="US-EN-Alexa-Basement-Door-Unlocked.wav">US-EN-Alexa-Basement-Door-Unlocked.wav</option>
-      <option value="US-EN-Alexa-Boyfriend-Is-Arriving.wav">US-EN-Alexa-Boyfriend-Is-Arriving.wav</option>
-      <option value="US-EN-Alexa-Daughter-Is-Arriving.wav">US-EN-Alexa-Daughter-Is-Arriving.wav</option>
-      <option value="US-EN-Alexa-Front-Door-Opened.wav">US-EN-Alexa-Front-Door-Opened.wav</option>
-      <option value="US-EN-Alexa-Front-Door-Unlocked.wav">US-EN-Alexa-Front-Door-Unlocked.wav</option>
-      <option value="US-EN-Alexa-Garage-Door-Opened.wav">US-EN-Alexa-Garage-Door-Opened.wav</option>
-      <option value="US-EN-Alexa-Girlfriend-Is-Arriving.wav">US-EN-Alexa-Girlfriend-Is-Arriving.wav</option>
-      <option value="US-EN-Alexa-Good-Morning.wav">US-EN-Alexa-Good-Morning.wav</option>
-      <option value="US-EN-Alexa-Good-Night.wav">US-EN-Alexa-Good-Night.wav</option>
-      <option value="US-EN-Alexa-Husband-Is-Arriving.wav">US-EN-Alexa-Husband-Is-Arriving.wav</option>
-      <option value="US-EN-Alexa-Mail-Has-Arrived.wav">US-EN-Alexa-Mail-Has-Arrived.wav</option>
-      <option value="US-EN-Alexa-Motion-At-Back-Door.wav">US-EN-Alexa-Motion-At-Back-Door.wav</option>
-      <option value="US-EN-Alexa-Motion-At-Front-Door.wav">US-EN-Alexa-Motion-At-Front-Door.wav</option>
-      <option value="US-EN-Alexa-Motion-Detected-Generic.wav">US-EN-Alexa-Motion-Detected-Generic.wav</option>
-      <option value="US-EN-Alexa-Motion-In-Back-Yard.wav">US-EN-Alexa-Motion-In-Back-Yard.wav</option>
-      <option value="US-EN-Alexa-Motion-In-Basement.wav">US-EN-Alexa-Motion-In-Basement.wav</option>
-      <option value="US-EN-Alexa-Motion-In-Front-Yard.wav">US-EN-Alexa-Motion-In-Front-Yard.wav</option>
-      <option value="US-EN-Alexa-Motion-In-Garage.wav">US-EN-Alexa-Motion-In-Garage.wav</option>
-      <option value="US-EN-Alexa-Patio-Door-Opened.wav">US-EN-Alexa-Patio-Door-Opened.wav</option>
-      <option value="US-EN-Alexa-Patio-Door-Unlocked.wav">US-EN-Alexa-Patio-Door-Unlocked.wav</option>
-      <option value="US-EN-Alexa-Smoke-Detected-Generic.wav">US-EN-Alexa-Smoke-Detected-Generic.wav</option>
-      <option value="US-EN-Alexa-Smoke-Detected-In-Basement.wav">US-EN-Alexa-Smoke-Detected-In-Basement.wav</option>
-      <option value="US-EN-Alexa-Smoke-Detected-In-Garage.wav">US-EN-Alexa-Smoke-Detected-In-Garage.wav</option>
-      <option value="US-EN-Alexa-Smoke-Detected-In-Kitchen.wav">US-EN-Alexa-Smoke-Detected-In-Kitchen.wav</option>
-      <option value="US-EN-Alexa-Son-Is-Arriving.wav">US-EN-Alexa-Son-Is-Arriving.wav</option>
-      <option value="US-EN-Alexa-Water-Detected-Generic.wav">US-EN-Alexa-Water-Detected-Generic.wav</option>
-      <option value="US-EN-Alexa-Water-Detected-In-Basement.wav">US-EN-Alexa-Water-Detected-In-Basement.wav</option>
-      <option value="US-EN-Alexa-Water-Detected-In-Garage.wav">US-EN-Alexa-Water-Detected-In-Garage.wav</option>
-      <option value="US-EN-Alexa-Water-Detected-In-Kitchen.wav">US-EN-Alexa-Water-Detected-In-Kitchen.wav</option>
-      <option value="US-EN-Alexa-Welcome-Home.wav">US-EN-Alexa-Welcome-Home.wav</option>
-      <option value="US-EN-Alexa-Wife-Is-Arriving.wav">US-EN-Alexa-Wife-Is-Arriving.wav</option>
-      <option value="US-EN-Daisy-Back-Door-Motion.wav">US-EN-Daisy-Back-Door-Motion.wav</option>
-      <option value="US-EN-Daisy-Back-Door-Open.wav">US-EN-Daisy-Back-Door-Open.wav</option>
-      <option value="US-EN-Daisy-Front-Door-Motion.wav">US-EN-Daisy-Front-Door-Motion.wav</option>
-      <option value="US-EN-Daisy-Front-Door-Open.wav">US-EN-Daisy-Front-Door-Open.wav</option>
-      <option value="US-EN-Daisy-Front-Window-Open.wav">US-EN-Daisy-Front-Window-Open.wav</option>
-      <option value="US-EN-Daisy-Garage-Door-Open.wav">US-EN-Daisy-Garage-Door-Open.wav</option>
-      <option value="US-EN-Daisy-Guest-Bath-Leak.wav">US-EN-Daisy-Guest-Bath-Leak.wav</option>
-      <option value="US-EN-Daisy-Kitchen-Sink-Leak.wav">US-EN-Daisy-Kitchen-Sink-Leak.wav</option>
-      <option value="US-EN-Daisy-Kitchen-Window-Open.wav">US-EN-Daisy-Kitchen-Window-Open.wav</option>
-      <option value="US-EN-Daisy-Laundry-Room-Leak.wav">US-EN-Daisy-Laundry-Room-Leak.wav</option>
-      <option value="US-EN-Daisy-Master-Bath-Leak.wav">US-EN-Daisy-Master-Bath-Leak.wav</option>
-      <option value="US-EN-Daisy-Master-Bedroom-Window-Open.wav">US-EN-Daisy-Master-Bedroom-Window-Open.wav</option>
-      <option value="US-EN-Daisy-Office-Window-Open.wav">US-EN-Daisy-Office-Window-Open.wav</option>
-      <option value="US-EN-Daisy-Refrigerator-Leak.wav">US-EN-Daisy-Refrigerator-Leak.wav</option>
-      <option value="US-EN-Daisy-Water-Heater-Leak.wav">US-EN-Daisy-Water-Heater-Leak.wav</option>
-      <option value="US-EN-Morgan-Freeman-Back-Door-Closed.wav">US-EN-Morgan-Freeman-Back-Door-Closed.wav</option>
-      <option value="US-EN-Morgan-Freeman-Back-Door-Locked.wav">US-EN-Morgan-Freeman-Back-Door-Locked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Back-Door-Opened.wav">US-EN-Morgan-Freeman-Back-Door-Opened.wav</option>
-      <option value="US-EN-Morgan-Freeman-Back-Door-Unlocked.wav">US-EN-Morgan-Freeman-Back-Door-Unlocked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Basement-Door-Closed.wav">US-EN-Morgan-Freeman-Basement-Door-Closed.wav</option>
-      <option value="US-EN-Morgan-Freeman-Basement-Door-Locked.wav">US-EN-Morgan-Freeman-Basement-Door-Locked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Basement-Door-Opened.wav">US-EN-Morgan-Freeman-Basement-Door-Opened.wav</option>
-      <option value="US-EN-Morgan-Freeman-Basement-Door-Unlocked.wav">US-EN-Morgan-Freeman-Basement-Door-Unlocked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Boss-Is-Arriving.wav">US-EN-Morgan-Freeman-Boss-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Boyfriend-Is-Arriving.wav">US-EN-Morgan-Freeman-Boyfriend-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Cleaning-Supplies-Closet-Opened.wav">US-EN-Morgan-Freeman-Cleaning-Supplies-Closet-Opened.wav</option>
-      <option value="US-EN-Morgan-Freeman-Coworker-Is-Arriving.wav">US-EN-Morgan-Freeman-Coworker-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Daughter-Is-Arriving.wav">US-EN-Morgan-Freeman-Daughter-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Friend-Is-Arriving.wav">US-EN-Morgan-Freeman-Friend-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Front-Door-Closed.wav">US-EN-Morgan-Freeman-Front-Door-Closed.wav</option>
-      <option value="US-EN-Morgan-Freeman-Front-Door-Locked.wav">US-EN-Morgan-Freeman-Front-Door-Locked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Front-Door-Opened.wav">US-EN-Morgan-Freeman-Front-Door-Opened.wav</option>
-      <option value="US-EN-Morgan-Freeman-Front-Door-Unlocked.wav">US-EN-Morgan-Freeman-Front-Door-Unlocked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Garage-Door-Closed.wav">US-EN-Morgan-Freeman-Garage-Door-Closed.wav</option>
-      <option value="US-EN-Morgan-Freeman-Garage-Door-Opened.wav">US-EN-Morgan-Freeman-Garage-Door-Opened.wav</option>
-      <option value="US-EN-Morgan-Freeman-Girlfriend-Is-Arriving.wav">US-EN-Morgan-Freeman-Girlfriend-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Good-Morning.wav">US-EN-Morgan-Freeman-Good-Morning.wav</option>
-      <option value="US-EN-Morgan-Freeman-Good-Night.wav">US-EN-Morgan-Freeman-Good-Night.wav</option>
-      <option value="US-EN-Morgan-Freeman-Liquor-Cabinet-Opened.wav">US-EN-Morgan-Freeman-Liquor-Cabinet-Opened.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-Detected.wav">US-EN-Morgan-Freeman-Motion-Detected.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Basement.wav">US-EN-Morgan-Freeman-Motion-In-Basement.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Bedroom.wav">US-EN-Morgan-Freeman-Motion-In-Bedroom.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Game-Room.wav">US-EN-Morgan-Freeman-Motion-In-Game-Room.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Garage.wav">US-EN-Morgan-Freeman-Motion-In-Garage.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Kitchen.wav">US-EN-Morgan-Freeman-Motion-In-Kitchen.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Living-Room.wav">US-EN-Morgan-Freeman-Motion-In-Living-Room.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Theater.wav">US-EN-Morgan-Freeman-Motion-In-Theater.wav</option>
-      <option value="US-EN-Morgan-Freeman-Motion-In-Wine-Cellar.wav">US-EN-Morgan-Freeman-Motion-In-Wine-Cellar.wav</option>
-      <option value="US-EN-Morgan-Freeman-Patio-Door-Closed.wav">US-EN-Morgan-Freeman-Patio-Door-Closed.wav</option>
-      <option value="US-EN-Morgan-Freeman-Patio-Door-Locked.wav">US-EN-Morgan-Freeman-Patio-Door-Locked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Patio-Door-Opened.wav">US-EN-Morgan-Freeman-Patio-Door-Opened.wav</option>
-      <option value="US-EN-Morgan-Freeman-Patio-Door-Unlocked.wav">US-EN-Morgan-Freeman-Patio-Door-Unlocked.wav</option>
-      <option value="US-EN-Morgan-Freeman-Roommate-Is-Arriving.wav">US-EN-Morgan-Freeman-Roommate-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Searching-For-Car-Keys.wav">US-EN-Morgan-Freeman-Searching-For-Car-Keys.wav</option>
-      <option value="US-EN-Morgan-Freeman-Setting-The-Mood.wav">US-EN-Morgan-Freeman-Setting-The-Mood.wav</option>
-      <option value="US-EN-Morgan-Freeman-Smartthings-Detected-A-Flood.wav">US-EN-Morgan-Freeman-Smartthings-Detected-A-Flood.wav</option>
-      <option value="US-EN-Morgan-Freeman-Smartthings-Detected-Carbon-Monoxide.wav">US-EN-Morgan-Freeman-Smartthings-Detected-Carbon-Monoxide.wav</option>
-      <option value="US-EN-Morgan-Freeman-Smartthings-Detected-Smoke.wav">US-EN-Morgan-Freeman-Smartthings-Detected-Smoke.wav</option>
-      <option value="US-EN-Morgan-Freeman-Smoke-Detected-In-Basement.wav">US-EN-Morgan-Freeman-Smoke-Detected-In-Basement.wav</option>
-      <option value="US-EN-Morgan-Freeman-Smoke-Detected-In-Garage.wav">US-EN-Morgan-Freeman-Smoke-Detected-In-Garage.wav</option>
-      <option value="US-EN-Morgan-Freeman-Smoke-Detected-In-Kitchen.wav">US-EN-Morgan-Freeman-Smoke-Detected-In-Kitchen.wav</option>
-      <option value="US-EN-Morgan-Freeman-Someone-Is-Arriving.wav">US-EN-Morgan-Freeman-Someone-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Son-Is-Arriving.wav">US-EN-Morgan-Freeman-Son-Is-Arriving.wav</option>
-      <option value="US-EN-Morgan-Freeman-Starting-Movie-Mode.wav">US-EN-Morgan-Freeman-Starting-Movie-Mode.wav</option>
-      <option value="US-EN-Morgan-Freeman-Starting-Party-Mode.wav">US-EN-Morgan-Freeman-Starting-Party-Mode.wav</option>
-      <option value="US-EN-Morgan-Freeman-Starting-Romance-Mode.wav">US-EN-Morgan-Freeman-Starting-Romance-Mode.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-All-The-Lights.wav">US-EN-Morgan-Freeman-Turning-Off-All-The-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Air-Conditioner.wav">US-EN-Morgan-Freeman-Turning-Off-The-Air-Conditioner.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Bar-Lights.wav">US-EN-Morgan-Freeman-Turning-Off-The-Bar-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Chandelier.wav">US-EN-Morgan-Freeman-Turning-Off-The-Chandelier.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Family-Room-Lights.wav">US-EN-Morgan-Freeman-Turning-Off-The-Family-Room-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Hallway-Lights.wav">US-EN-Morgan-Freeman-Turning-Off-The-Hallway-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Kitchen-Light.wav">US-EN-Morgan-Freeman-Turning-Off-The-Kitchen-Light.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Light.wav">US-EN-Morgan-Freeman-Turning-Off-The-Light.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Lights.wav">US-EN-Morgan-Freeman-Turning-Off-The-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-Mood-Lights.wav">US-EN-Morgan-Freeman-Turning-Off-The-Mood-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-Off-The-TV.wav">US-EN-Morgan-Freeman-Turning-Off-The-TV.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Air-Conditioner.wav">US-EN-Morgan-Freeman-Turning-On-The-Air-Conditioner.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Bar-Lights.wav">US-EN-Morgan-Freeman-Turning-On-The-Bar-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Chandelier.wav">US-EN-Morgan-Freeman-Turning-On-The-Chandelier.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Family-Room-Lights.wav">US-EN-Morgan-Freeman-Turning-On-The-Family-Room-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Hallway-Lights.wav">US-EN-Morgan-Freeman-Turning-On-The-Hallway-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Kitchen-Light.wav">US-EN-Morgan-Freeman-Turning-On-The-Kitchen-Light.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Light.wav">US-EN-Morgan-Freeman-Turning-On-The-Light.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Lights.wav">US-EN-Morgan-Freeman-Turning-On-The-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-Mood-Lights.wav">US-EN-Morgan-Freeman-Turning-On-The-Mood-Lights.wav</option>
-      <option value="US-EN-Morgan-Freeman-Turning-On-The-TV.wav">US-EN-Morgan-Freeman-Turning-On-The-TV.wav</option>
-      <option value="US-EN-Morgan-Freeman-Vacate-The-Premises.wav">US-EN-Morgan-Freeman-Vacate-The-Premises.wav</option>
-      <option value="US-EN-Morgan-Freeman-Water-Detected-In-Basement.wav">US-EN-Morgan-Freeman-Water-Detected-In-Basement.wav</option>
-      <option value="US-EN-Morgan-Freeman-Water-Detected-In-Garage.wav">US-EN-Morgan-Freeman-Water-Detected-In-Garage.wav</option>
-      <option value="US-EN-Morgan-Freeman-Water-Detected-In-Kitchen.wav">US-EN-Morgan-Freeman-Water-Detected-In-Kitchen.wav</option>
-      <option value="US-EN-Morgan-Freeman-Welcome-Home.wav">US-EN-Morgan-Freeman-Welcome-Home.wav</option>
-      <option value="US-EN-Morgan-Freeman-Wife-Is-Arriving.wav">US-EN-Morgan-Freeman-Wife-Is-Arriving.wav</option>
-    </select>
-  </div>
-  <div class="form-row">
-    <label for="node-input-customSound">Custom Sound (uploaded, overrides bundled)</label>
-    <input type="text" id="node-input-customSound" placeholder="my_upload.wav">
-  </div>
-  <div class="form-row">
-    <label for="node-input-interruptionLevel">Interruption Level</label>
-    <select id="node-input-interruptionLevel">
-      <option value="passive">Passive (iOS 15+)</option>
-      <option value="active">Active (Default)</option>
-      <option value="time-sensitive">Time Sensitive (iOS 15+)</option>
-      <option value="critical">Critical</option>
-    </select>
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-userInfo" style="width:auto">
-    <label for="node-input-userInfo" style="width:auto">Populate user information</label>
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-isClearNotificationsOnAction" style="width:auto">
-    <label for="node-input-isClearNotificationsOnAction" style="width:auto">Clear on other devices when actioned</label>
-  </div>
-  <div class="form-row">
-    <label for="node-input-staggerMs">Stagger between sends (ms, 0 = disabled)</label>
-    <input type="number" id="node-input-staggerMs" min="0" step="100">
-  </div>
-  <div class="form-row">
-    <input type="checkbox" id="node-input-debugMode" style="width:auto">
-    <label for="node-input-debugMode" style="width:auto">Debug mode</label>
-  </div>
-  <div class="form-row">
-    <label for="node-input-badge">Badge count (optional)</label>
-    <input type="number" id="node-input-badge" min="0" step="1">
-  </div>
-  <div class="form-row">
-    <label>Foreground presentation</label>
-    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="alert"> Alert</label>
-    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="badge"> Badge</label>
-    <label style="font-weight:normal"><input type="checkbox" class="presopt" value="sound"> Sound</label>
-  </div>
+      <!-- hidden suggestion source for the sound combo: the verified bundled catalog -->
+      <datalist id="ha-sound-options">
+        <option value="default"></option>
+        <option value="none"></option>
+        <option value="US-EN-Alexa-Back-Door-Opened.wav"></option>
+        <option value="US-EN-Alexa-Back-Door-Unlocked.wav"></option>
+        <option value="US-EN-Alexa-Basement-Door-Opened.wav"></option>
+        <option value="US-EN-Alexa-Basement-Door-Unlocked.wav"></option>
+        <option value="US-EN-Alexa-Boyfriend-Is-Arriving.wav"></option>
+        <option value="US-EN-Alexa-Daughter-Is-Arriving.wav"></option>
+        <option value="US-EN-Alexa-Front-Door-Opened.wav"></option>
+        <option value="US-EN-Alexa-Front-Door-Unlocked.wav"></option>
+        <option value="US-EN-Alexa-Garage-Door-Opened.wav"></option>
+        <option value="US-EN-Alexa-Girlfriend-Is-Arriving.wav"></option>
+        <option value="US-EN-Alexa-Good-Morning.wav"></option>
+        <option value="US-EN-Alexa-Good-Night.wav"></option>
+        <option value="US-EN-Alexa-Husband-Is-Arriving.wav"></option>
+        <option value="US-EN-Alexa-Mail-Has-Arrived.wav"></option>
+        <option value="US-EN-Alexa-Motion-At-Back-Door.wav"></option>
+        <option value="US-EN-Alexa-Motion-At-Front-Door.wav"></option>
+        <option value="US-EN-Alexa-Motion-Detected-Generic.wav"></option>
+        <option value="US-EN-Alexa-Motion-In-Back-Yard.wav"></option>
+        <option value="US-EN-Alexa-Motion-In-Basement.wav"></option>
+        <option value="US-EN-Alexa-Motion-In-Front-Yard.wav"></option>
+        <option value="US-EN-Alexa-Motion-In-Garage.wav"></option>
+        <option value="US-EN-Alexa-Patio-Door-Opened.wav"></option>
+        <option value="US-EN-Alexa-Patio-Door-Unlocked.wav"></option>
+        <option value="US-EN-Alexa-Smoke-Detected-Generic.wav"></option>
+        <option value="US-EN-Alexa-Smoke-Detected-In-Basement.wav"></option>
+        <option value="US-EN-Alexa-Smoke-Detected-In-Garage.wav"></option>
+        <option value="US-EN-Alexa-Smoke-Detected-In-Kitchen.wav"></option>
+        <option value="US-EN-Alexa-Son-Is-Arriving.wav"></option>
+        <option value="US-EN-Alexa-Water-Detected-Generic.wav"></option>
+        <option value="US-EN-Alexa-Water-Detected-In-Basement.wav"></option>
+        <option value="US-EN-Alexa-Water-Detected-In-Garage.wav"></option>
+        <option value="US-EN-Alexa-Water-Detected-In-Kitchen.wav"></option>
+        <option value="US-EN-Alexa-Welcome-Home.wav"></option>
+        <option value="US-EN-Alexa-Wife-Is-Arriving.wav"></option>
+        <option value="US-EN-Daisy-Back-Door-Motion.wav"></option>
+        <option value="US-EN-Daisy-Back-Door-Open.wav"></option>
+        <option value="US-EN-Daisy-Front-Door-Motion.wav"></option>
+        <option value="US-EN-Daisy-Front-Door-Open.wav"></option>
+        <option value="US-EN-Daisy-Front-Window-Open.wav"></option>
+        <option value="US-EN-Daisy-Garage-Door-Open.wav"></option>
+        <option value="US-EN-Daisy-Guest-Bath-Leak.wav"></option>
+        <option value="US-EN-Daisy-Kitchen-Sink-Leak.wav"></option>
+        <option value="US-EN-Daisy-Kitchen-Window-Open.wav"></option>
+        <option value="US-EN-Daisy-Laundry-Room-Leak.wav"></option>
+        <option value="US-EN-Daisy-Master-Bath-Leak.wav"></option>
+        <option value="US-EN-Daisy-Master-Bedroom-Window-Open.wav"></option>
+        <option value="US-EN-Daisy-Office-Window-Open.wav"></option>
+        <option value="US-EN-Daisy-Refrigerator-Leak.wav"></option>
+        <option value="US-EN-Daisy-Water-Heater-Leak.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Back-Door-Closed.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Back-Door-Locked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Back-Door-Opened.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Back-Door-Unlocked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Basement-Door-Closed.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Basement-Door-Locked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Basement-Door-Opened.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Basement-Door-Unlocked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Boss-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Boyfriend-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Cleaning-Supplies-Closet-Opened.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Coworker-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Daughter-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Friend-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Front-Door-Closed.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Front-Door-Locked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Front-Door-Opened.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Front-Door-Unlocked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Garage-Door-Closed.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Garage-Door-Opened.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Girlfriend-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Good-Morning.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Good-Night.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Liquor-Cabinet-Opened.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-Detected.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Basement.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Bedroom.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Game-Room.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Garage.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Kitchen.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Living-Room.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Theater.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Motion-In-Wine-Cellar.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Patio-Door-Closed.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Patio-Door-Locked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Patio-Door-Opened.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Patio-Door-Unlocked.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Roommate-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Searching-For-Car-Keys.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Setting-The-Mood.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Smartthings-Detected-A-Flood.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Smartthings-Detected-Carbon-Monoxide.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Smartthings-Detected-Smoke.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Smoke-Detected-In-Basement.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Smoke-Detected-In-Garage.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Smoke-Detected-In-Kitchen.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Someone-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Son-Is-Arriving.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Starting-Movie-Mode.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Starting-Party-Mode.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Starting-Romance-Mode.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-All-The-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Air-Conditioner.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Bar-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Chandelier.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Family-Room-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Hallway-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Kitchen-Light.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Light.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-Mood-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-Off-The-TV.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Air-Conditioner.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Bar-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Chandelier.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Family-Room-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Hallway-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Kitchen-Light.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Light.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-Mood-Lights.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Turning-On-The-TV.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Vacate-The-Premises.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Water-Detected-In-Basement.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Water-Detected-In-Garage.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Water-Detected-In-Kitchen.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Welcome-Home.wav"></option>
+        <option value="US-EN-Morgan-Freeman-Wife-Is-Arriving.wav"></option>
+      </datalist>
+
+      <div class="ha-grid ha-align-start">
+        <label for="ha-sound-input">Sound</label>
+        <div class="ha-control">
+          <div class="ha-with-caret">
+            <input type="text" id="ha-sound-input" placeholder="Default — type to search, or enter a filename">
+            <span class="ha-caret">&#9660;</span>
+          </div>
+          <div class="ha-hint">Search the bundled sounds, or type any uploaded <code>.wav</code>. <code>none</code> = silent.</div>
+        </div>
+
+        <label for="node-input-interruptionLevel">Interruption</label>
+        <select id="node-input-interruptionLevel">
+          <option value="passive">Passive (iOS 15+)</option>
+          <option value="active">Active (default)</option>
+          <option value="time-sensitive">Time Sensitive (iOS 15+)</option>
+          <option value="critical">Critical</option>
+        </select>
+
+        <label for="node-input-staggerMs">Stagger</label>
+        <div class="ha-pair" style="grid-template-columns:110px 1fr;align-items:center">
+          <input type="number" id="node-input-staggerMs" min="0" step="100">
+          <span class="ha-hint" style="margin:0">ms between devices · 0 disables</span>
+        </div>
+
+        <label for="node-input-badge">Badge count</label>
+        <div class="ha-pair" style="grid-template-columns:110px 1fr;align-items:center">
+          <input type="number" id="node-input-badge" min="0" step="1" placeholder="—">
+          <span class="ha-hint" style="margin:0">0 clears the badge</span>
+        </div>
+      </div>
+
+      <div class="ha-divider"></div>
+
+      <label style="display:block;margin-bottom:6px">Foreground presentation</label>
+      <div class="ha-seg" id="ha-foreground" role="group" aria-label="Foreground presentation">
+        <button type="button" class="ha-seg-btn" data-value="alert" aria-pressed="false" onclick="window.__haSegToggle(this)"><span class="ha-seg-check"></span>Alert</button>
+        <button type="button" class="ha-seg-btn" data-value="badge" aria-pressed="false" onclick="window.__haSegToggle(this)"><span class="ha-seg-check"></span>Badge</button>
+        <button type="button" class="ha-seg-btn" data-value="sound" aria-pressed="false" onclick="window.__haSegToggle(this)"><span class="ha-seg-check"></span>Sound</button>
+      </div>
+      <div class="ha-hint">How the notification shows while the app is already open. Tap each to toggle independently.</div>
+
+      <div class="ha-divider"></div>
+
+      <div class="ha-checks">
+        <label class="ha-check"><input type="checkbox" id="node-input-userInfo"> Populate user info</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-isClearNotificationsOnAction"> Clear on other devices when actioned</label>
+        <label class="ha-check"><input type="checkbox" id="node-input-debugMode"> Debug mode</label>
+      </div>
 
   </div></div>
   <div class="ha-section" id="ha-sec-liveactivity">
