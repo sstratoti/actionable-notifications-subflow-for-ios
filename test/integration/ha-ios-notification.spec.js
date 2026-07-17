@@ -314,3 +314,83 @@ describe('action-received handling', () => {
     });
   });
 });
+
+describe('user-info enrichment', () => {
+  afterEach(function (done) {
+    helper.unload().then(() => done());
+  });
+
+  it('attaches the matching user record when the sent notification had populateUserInfo set', function (done) {
+    const users = [{ id: 'user-123', name: 'Steve' }, { id: 'user-456', name: 'Someone Else' }];
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant({ send: async () => users });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], userInfo: true,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          msg.userData.should.eql({ id: 'user-123', name: 'Steve' });
+          done();
+        });
+
+        mock.emitFakeActionEvent({
+          event: {
+            actionName: '1',
+            action_data: {
+              tag: 'FRONT_DOOR', deviceName: 'my_iphone',
+              allServices: [{ deviceName: 'my_iphone' }], populateUserInfo: true,
+            },
+          },
+          context: { user_id: 'user-123' },
+        });
+      }, 20);
+    });
+  });
+
+  it('does not fetch users when populateUserInfo was not set', function (done) {
+    let sendCalled = false;
+    const { nodeUnderTest, mock } = loadNodeWithMockHomeAssistant({ send: async () => { sendCalled = true; return []; } });
+    const flow = [
+      fakeServerFlowNode,
+      {
+        id: 'n1', type: 'ha-ios-notification', server: 'server1',
+        services: [{ deviceName: 'my_iphone' }], tag: 'front-door',
+        actions: [{ title: 'Open' }], userInfo: false,
+        wires: [['n2']],
+      },
+      { id: 'n2', type: 'helper' },
+    ];
+    helper.load(nodeUnderTest, flow, () => {
+      const n1 = helper.getNode('n1');
+      const n2 = helper.getNode('n2');
+      n1.receive({ payload: {} });
+
+      setTimeout(() => {
+        n2.on('input', (msg) => {
+          sendCalled.should.equal(false);
+          (msg.userData === undefined).should.equal(true);
+          done();
+        });
+
+        mock.emitFakeActionEvent({
+          event: {
+            actionName: '1',
+            action_data: { tag: 'FRONT_DOOR', deviceName: 'my_iphone', allServices: [{ deviceName: 'my_iphone' }], populateUserInfo: false },
+          },
+          context: { user_id: 'user-123' },
+        });
+      }, 20);
+    });
+  });
+});

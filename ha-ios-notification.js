@@ -74,7 +74,7 @@ module.exports = function (RED) {
     node.homeAssistant = node.serverConfig ? haClient.connect(node.serverConfig) : null;
 
     node.actionHandler = function (event) {
-      handleActionReceived(node, event);
+      handleActionReceived(node, event).catch((err) => node.error(err));
     };
 
     if (node.homeAssistant) {
@@ -171,18 +171,18 @@ module.exports = function (RED) {
     return raw === undefined || raw === null ? undefined : String(raw);
   }
 
-  function handleActionReceived(node, event) {
+  async function handleActionReceived(node, event) {
     const eventPayload = event && event.event;
     if (!eventPayload || !eventPayload.action_data) return;
 
-    const { tag, deviceName } = eventPayload.action_data;
+    const { tag, deviceName, populateUserInfo } = eventPayload.action_data;
     if (!tag || !deviceName) return;
 
     const stored = node.context().get('sentMessages') || [];
     const owned = findMatch(stored, tag, deviceName);
     if (!owned) return; // belongs to a different node instance — ignore
 
-    const actionId = normalizeActionId(eventPayload);
+    const actionId = normalizeActionId(eventPayload); // event.action ?? event.actionName
     if (actionId === undefined) return;
 
     const actionIndex = node.actions.findIndex((a, i) => {
@@ -191,8 +191,19 @@ module.exports = function (RED) {
     });
     if (actionIndex === -1) return;
 
+    const outMsg = { payload: event, actionId, matchedMessage: owned.message };
+
+    if (populateUserInfo && event.context && event.context.user_id) {
+      try {
+        const users = await haClient.fetchUsers(node.homeAssistant);
+        outMsg.userData = users.find((u) => u.id === event.context.user_id);
+      } catch (err) {
+        node.error(err, outMsg);
+      }
+    }
+
     const outputs = new Array(node.outputCount).fill(null);
-    outputs[actionIndex] = { payload: event, actionId, matchedMessage: owned.message };
+    outputs[actionIndex] = outMsg;
     node.status({ text: `action ${actionId} received`, shape: 'dot', fill: 'green' });
     node.send(outputs);
   }
