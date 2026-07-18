@@ -15,10 +15,15 @@ or hand-authored JSON:
 1. **Text-input actions** — an action whose button opens a text field (e.g.
    "Where did you park?" → the user types a reply).
 2. **`categoryName`** — a notification-level iOS category name.
+3. **Action `icon`** — the SF Symbol shown on an action button (used 16× by the
+   old subflow; the payload builder already passes `icon` through, but the action
+   card has no control for it).
 
 These are the last field-parity gaps vs the old `iOS Actionable Notification`
-subflow (see the sibling migration spec in the `homeassistant` repo). Closing
-them lets the migration convert every in-scope notification through the editor.
+subflow (a full UI audit confirmed everything else is exposed — sound via the
+combo, presentation options via the segmented control, all map/media/Live-Activity
+fields). Closing them lets the migration convert every in-scope notification
+through the editor.
 
 ## Background (current state)
 
@@ -60,8 +65,14 @@ In the action save/read logic (~l.437–449), per action:
   `action.textInputButtonTitle = <field>`, `action.textInputPlaceholder = <field>`;
 - else → leave `behavior` unset and omit the two props.
 
+**Action `icon` field:** add an "Icon · optional" text input (`.action-icon`,
+placeholder e.g. `sfsymbols:car`) to the action card — a natural spot is the
+URI row or next to Title. Pre-populate from `data.icon`; on save set
+`action.icon = <field>` when non-empty. No payload change (`icon` is already in
+`IOS_ACTION_PROPS`).
+
 No `haDefaults` change (action props live in the `actions[]` objects). No payload
-change (already handled by `IOS_ACTION_PROPS`).
+change for either text-input or icon (both already handled by `IOS_ACTION_PROPS`).
 
 ### 2. `ha-ios-notification.html` — Basics field (category)
 
@@ -85,9 +96,9 @@ change (already handled by `IOS_ACTION_PROPS`).
     `data.push.category === "parking"`; given empty/undefined, `category` is
     absent; given `msg.notificationOverride.categoryName`, the override wins.
   - action passthrough: an action with `behavior:"textInput"` +
-    `textInputButtonTitle` + `textInputPlaceholder` survives `normalizeActions`
-    and lands in `data.actions[i]` with those props (guards the wiring the UI
-    depends on).
+    `textInputButtonTitle` + `textInputPlaceholder` (and `icon`) survives
+    `normalizeActions` and lands in `data.actions[i]` with those props (guards the
+    wiring the UI depends on).
 - **Editor UI (manual, `docs/TESTING.md` checklist):** add a checklist item —
   create an action, tick "Text input", set button/placeholder, deploy, read back
   the node JSON, confirm `behavior:"textInput"` + the two fields; and a Category
@@ -109,6 +120,10 @@ unambiguous, and add a CHANGELOG entry under the unreleased section.
 
 ## Out of scope
 
+- **Action `targetData`** (service-data for the tap-to-perform feature) — has no
+  UI control either, but it is a *new-feature nicety*, not a v1-subflow parity
+  gap. **Deferred** unless Steve opts it in (would be a small `.action-targetData`
+  JSON/textarea field alongside targetService/targetEntityId).
 - Android text-input behavior.
 - Pre-registered/static iOS categories beyond passing the name through (HA still
   auto-registers inline `actions`; a named category simply rides along on
