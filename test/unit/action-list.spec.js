@@ -76,6 +76,11 @@ describe('action-list', () => {
       result[0].targetEntityId.should.equal('lock.front_door');
       result[0].targetData.should.eql({ code: '1234' });
     });
+
+    it('passes through targetData for tap-to-perform', () => {
+      const [a] = normalizeActions([{ title: 'Unlock', targetService: 'lock.unlock', targetData: { code: '1234' } }]);
+      a.targetData.should.eql({ code: '1234' });
+    });
   });
 
   describe('applyActionOverrides', () => {

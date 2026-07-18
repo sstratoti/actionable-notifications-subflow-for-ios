@@ -86,6 +86,7 @@
   .ha-action-body { padding: 9px; display: flex; flex-direction: column; gap: 8px; }
   .ha-tap { border-top: 1px dashed var(--red-ui-secondary-border-color, #e4e4e9); padding-top: 8px; }
   .ha-tap-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--red-ui-secondary-text-color, #888); margin-bottom: 5px; }
+  .ha-td-btn.ha-td-set { font-weight: 600; }
 </style>
 <script type="text/javascript">
   var haDefaults = {
@@ -407,6 +408,31 @@
             return haServiceOptions.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
           });
           haEntityCombo(entInput, svcInput);
+
+          // Service data (JSON) drill-down. State lives on tdState (closed over by this
+          // row's click handler); the serialized value is mirrored into a hidden input
+          // (.action-targetData) so oneditsave — which re-finds elements via `$(this).find()`
+          // on the editableList <li>, not via this closure — can read it back reliably.
+          var tdRow = $('<div class="ha-sub" style="margin-top:6px"><small>Service data (JSON) · optional</small></div>').appendTo(tap);
+          var tdHidden = $('<input type="hidden" class="action-targetData">').appendTo(tdRow);
+          var tdState = { value: (data.targetData !== undefined ? data.targetData : '') };
+          var tdBtn = $('<button type="button" class="red-ui-button ha-td-btn" style="width:100%;text-align:left;"></button>').appendTo(tdRow);
+          function tdLabel() {
+            var has = tdState.value && (typeof tdState.value !== 'object' || Object.keys(tdState.value).length);
+            tdBtn.text(has ? '{…} data set — click to edit' : 'empty — click to add JSON');
+            tdBtn.toggleClass('ha-td-set', !!has);
+            tdHidden.val(has ? JSON.stringify(tdState.value) : '');
+          }
+          tdLabel();
+          tdBtn.on('click', function () {
+            RED.editor.editJSON({
+              value: typeof tdState.value === 'string' ? tdState.value : JSON.stringify(tdState.value || {}, null, 4),
+              complete: function (v) {
+                try { tdState.value = v ? JSON.parse(v) : ''; } catch (e) { tdState.value = v; }
+                tdLabel();
+              },
+            });
+          });
         },
         sortable: true,
         removable: true,
@@ -464,6 +490,10 @@
         if (targetService) action.targetService = targetService;
         const targetEntityId = $(this).find('.action-targetEntityId').val();
         if (targetEntityId) action.targetEntityId = targetEntityId;
+        const targetDataRaw = $(this).find('.action-targetData').val();
+        if (targetDataRaw) {
+          try { action.targetData = JSON.parse(targetDataRaw); } catch (e) { /* leave unset on parse failure */ }
+        }
         const icon = $(this).find('.action-icon').val();
         if (icon) action.icon = icon;
         if ($(this).find('.action-textInput').prop('checked')) {

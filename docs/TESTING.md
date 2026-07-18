@@ -111,3 +111,11 @@ changes to it are verified by hand in a running Node-RED editor:
   Untick **Text input** and re-deploy — confirm `behavior`,
   `textInputButtonTitle`, and `textInputPlaceholder` are absent (icon should
   remain, since it's independent of the text-input toggle).
+- **Action targetData drill-down:** add an action, click the **Service data
+  (JSON)** button under Tap-to-perform — the built-in JSON editor opens.
+  Enter `{"code":"1234"}` and click **Done** — the button label switches to
+  "data set" and renders bold. Deploy and read the node's JSON — confirm
+  `action.targetData` equals `{ "code": "1234" }`. Reopen the editor, clear
+  the JSON to `{}` (or empty), click **Done** — the button reverts to
+  "empty — click to add JSON", and after re-deploying, `targetData` is
+  absent from that action's JSON.
