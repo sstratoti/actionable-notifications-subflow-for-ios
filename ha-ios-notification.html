@@ -360,7 +360,7 @@
           $('<input type="text" placeholder="1">').val(data.id || '').appendTo(
             $('<div class="ha-sub"><small>ID · optional</small></div>').appendTo(r1)).addClass('action-id');
 
-          var r2 = $('<div class="ha-pair" style="grid-template-columns:1fr 1.6fr">').appendTo(body);
+          var r2 = $('<div class="ha-pair" style="grid-template-columns:1fr 1.4fr 1fr">').appendTo(body);
           var modeWrap = $('<div class="ha-sub"><small>Activation</small></div>').appendTo(r2);
           var modeSelect = $('<select class="action-activationMode">').appendTo(modeWrap);
           ['foreground', 'background'].forEach(function (m) { modeSelect.append('<option value="' + m + '">' + m + '</option>'); });
