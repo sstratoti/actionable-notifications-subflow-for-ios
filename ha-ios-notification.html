@@ -25,6 +25,7 @@
   .ha-section.ha-open > .ha-section-head .ha-chev { transform: rotate(90deg); }
   .ha-section-head .ha-s-title { font-weight: 600; }
   .ha-section-head .ha-s-sub { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; }
+  .ha-beta { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:8px; font-size:10px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; background: var(--red-ui-secondary-background-selected, rgba(120,120,120,.15)); color: var(--red-ui-primary-text-color,#666); }
   .ha-section-body { padding: 10px; display: none; background: var(--red-ui-secondary-background, transparent); }
   .ha-section.ha-open > .ha-section-body { display: block; }
   .ha-note { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; margin: 0 0 9px; }
@@ -848,10 +849,11 @@
   </div></div>
   <div class="ha-section" id="ha-sec-liveactivity">
     <div class="ha-section-head" onclick="window.__haToggle(this)">
-      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Live Activity</span>
-      <span class="ha-s-sub">iOS 17.2+ · HA Core 2026.7+</span>
+      <span class="ha-chev">&#9654;</span><span class="ha-s-title">Live Activity</span><span class="ha-beta">Beta</span>
+      <span class="ha-s-sub">TestFlight app required</span>
     </div>
     <div class="ha-section-body">
+      <p class="ha-note">⚠️ Live Activities require the <strong>TestFlight</strong> build of the HA iOS Companion App.</p>
       <label class="ha-check" style="margin-bottom:9px"><input type="checkbox" id="node-input-liveActivity"> Send as a Live Activity (live_update)</label>
       <div class="ha-grid ha-align-start">
         <label>Progress</label>
