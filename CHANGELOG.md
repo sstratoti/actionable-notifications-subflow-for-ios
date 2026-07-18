@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+Config-panel completion and polish for improved UX.
+
+### Added
+- `categoryName` config field for iOS notification categories, emits as `data.push.category`.
+- Action `icon` field for custom action button icons.
+- Action text-input fields: `behavior` (text or secure), `textInputButtonTitle`, `textInputPlaceholder`.
+- Action `targetData` drill-down JSON editor for tap-to-perform service call parameters.
+- Live Activity section "Beta" badge with TestFlight requirement note.
+
+### Fixed
+- Config-panel layout: default target row alignment, "Actionable Buttons" label wrap, checkbox alignment, clickable combo-box caret.
+
 ## 1.0.0 (unreleased)
 
 Initial release of `node-red-contrib-ha-ios-notification`, replacing the

@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-ha-ios-notification",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Native Node-RED node for sending actionable iOS notifications via the Home Assistant Companion App, with HA entity pickers.",
   "keywords": [
     "node-red",
