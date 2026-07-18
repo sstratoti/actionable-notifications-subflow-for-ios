@@ -45,16 +45,16 @@
   .ha-sub small { color: var(--red-ui-secondary-text-color, #888); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
 
   /* tidy 2-col checkbox grid */
-  .ha-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
-  .ha-check { display: flex; align-items: center; gap: 7px; margin: 0; font-weight: normal; }
+  .ha-checks { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .ha-check { display: flex; align-items: center; gap: 7px; margin: 0; width: auto; font-weight: normal; }
   .ha-check input { width: auto !important; margin: 0; flex: none; }
   .ha-hint { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; margin-top: 5px; }
   .ha-divider { height: 1px; background: var(--red-ui-secondary-border-color, #e4e4e9); margin: 11px 0; border: 0; }
 
   /* combo caret affordance */
   .ha-with-caret { position: relative; }
-  .ha-with-caret input { padding-right: 22px; }
-  .ha-caret { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 9px; pointer-events: none; color: var(--red-ui-secondary-text-color, #888); }
+  .ha-with-caret input { padding-right: 22px; width: 100%; box-sizing: border-box; }
+  .ha-caret { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 9px; cursor: pointer; color: var(--red-ui-secondary-text-color, #888); }
 
   /* mono for technical values (device names / entity ids) */
   .ha-mono { font-family: var(--red-ui-monospace-font, monospace); font-size: 12px; }
@@ -282,6 +282,7 @@
 
       // Populate rows from existing config (backward-compatible services shape).
       (node.services || []).forEach((s) => $targetsList.editableList('addItem', { deviceName: s.deviceName }));
+      if (!(node.services || []).length) $targetsList.editableList('addItem', { deviceName: '' });
 
       var haCameraOptions = [];
       function haLoadCameras() {
@@ -303,6 +304,14 @@
       haCombo($('#node-input-contentType'), function (term) {
         var t = term.toLowerCase();
         return haContentTypes.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
+      });
+
+      // Static main-form carets only (camera entity, content type, sound). Bound here —
+      // before the actions list is populated below — so this selector can never pick up
+      // the per-row action-card carets, which get their own click handlers when created.
+      $('.ha-with-caret').each(function () {
+        var $inp = $(this).find('input'); var $c = $(this).find('.ha-caret');
+        $c.on('click', function () { $inp.focus(); if ($inp.autocomplete) $inp.autocomplete('search', ''); });
       });
 
       var haServiceOptions = [];
@@ -408,6 +417,8 @@
             return haServiceOptions.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
           });
           haEntityCombo(entInput, svcInput);
+          svcInput.parent().find('.ha-caret').on('click', function () { svcInput.focus(); svcInput.autocomplete('search', ''); });
+          entInput.parent().find('.ha-caret').on('click', function () { entInput.focus(); entInput.autocomplete('search', ''); });
 
           // Service data (JSON) drill-down. State lives on tdState (closed over by this
           // row's click handler); the serialized value is mirrored into a hidden input
@@ -582,7 +593,7 @@
     </div>
     <div class="ha-section-body">
   <div class="form-row">
-    <label>Actionable Buttons</label>
+    <label style="display:block;width:auto;margin-bottom:6px;">Actionable Buttons</label>
     <ol id="node-input-actions-container"></ol>
   </div>
 

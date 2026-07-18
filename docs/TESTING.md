@@ -119,3 +119,12 @@ changes to it are verified by hand in a running Node-RED editor:
   the JSON to `{}` (or empty), click **Done** — the button reverts to
   "empty — click to add JSON", and after re-deploying, `targetData` is
   absent from that action's JSON.
+- **Layout fixes:** open a fresh (unconfigured) node — the Targets list
+  shows one empty row by default, not zero. The **Actionable Buttons**
+  label reads on a single line, not wrapped/clipped. Add an action —
+  the **Destructive** and **Requires auth** checkboxes sit side-by-side
+  on one row with no wrapping/clipping. On any combo field with a caret
+  (e.g. Camera entity, Content type, Sound, and an action's Service /
+  Target entity), the caret sits flush against the input's right edge
+  with no gap, and clicking directly on the caret focuses the field and
+  opens its dropdown, same as clicking into the input itself.
