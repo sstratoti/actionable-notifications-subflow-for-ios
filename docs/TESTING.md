@@ -97,3 +97,17 @@ field mapping (`action`, not `actionName`) against a real button tap — the
 normalizer in `ha-ios-notification.js` degrades gracefully to the legacy
 `actionName` field if the modern mapping is ever wrong, but only a live event
 confirms which path actually fires.
+
+## Manual config-panel checklist
+
+The editor UI (`ha-ios-notification.html`) has no DOM test harness, so
+changes to it are verified by hand in a running Node-RED editor:
+
+- **Action icon + text-input fields:** add an action, set an Icon (e.g.
+  `sfsymbols:car`), tick **Text input**, set a Button title and Placeholder,
+  then Deploy and read the node's JSON (export the flow or inspect via the
+  Node-RED admin API) — confirm `icon`, `behavior: "textInput"`, and both
+  `textInputButtonTitle`/`textInputPlaceholder` are present on that action.
+  Untick **Text input** and re-deploy — confirm `behavior`,
+  `textInputButtonTitle`, and `textInputPlaceholder` are absent (icon should
+  remain, since it's independent of the text-input toggle).

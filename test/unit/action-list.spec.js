@@ -53,6 +53,17 @@ describe('action-list', () => {
       result[0].should.match(raw);
     });
 
+    it('passes through icon and text-input props', () => {
+      const [a] = normalizeActions([{
+        title: 'Reply', icon: 'sfsymbols:car',
+        behavior: 'textInput', textInputButtonTitle: 'Send', textInputPlaceholder: 'Type…',
+      }]);
+      a.icon.should.equal('sfsymbols:car');
+      a.behavior.should.equal('textInput');
+      a.textInputButtonTitle.should.equal('Send');
+      a.textInputPlaceholder.should.equal('Type…');
+    });
+
     it('carries through tap-to-perform target props', () => {
       const raw = {
         title: 'Unlock',

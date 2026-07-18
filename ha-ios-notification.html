@@ -367,12 +367,27 @@
           modeSelect.val(data.activationMode || 'foreground');
           $('<input type="text" class="ha-mono" placeholder="/lovelace/security">').val(data.uri || '').appendTo(
             $('<div class="ha-sub"><small>URI · optional</small></div>').appendTo(r2)).addClass('action-uri');
+          $('<input type="text" class="ha-mono action-icon" placeholder="sfsymbols:car">')
+            .val(data.icon || '').appendTo(
+              $('<div class="ha-sub"><small>Icon · optional</small></div>').appendTo(r2));
 
           var r3 = $('<div class="ha-checks" style="grid-template-columns:1fr 1fr">').appendTo(body);
           var destr = $('<label class="ha-check"><input type="checkbox" class="action-destructive"> Destructive</label>').appendTo(r3);
           if (data.destructive) destr.find('input').prop('checked', true);
           var auth = $('<label class="ha-check"><input type="checkbox" class="action-authenticationRequired"> Requires auth</label>').appendTo(r3);
           if (data.authenticationRequired) auth.find('input').prop('checked', true);
+
+          var tiWrap = $('<div class="ha-textinput">').appendTo(body);
+          var tiChk = $('<label class="ha-check"><input type="checkbox" class="action-textInput"> Text input</label>').appendTo(tiWrap);
+          var tiFields = $('<div class="ha-pair ha-ti-fields" style="margin-top:6px">').appendTo(tiWrap);
+          $('<input type="text" class="action-tiButton" placeholder="Send">').val(data.textInputButtonTitle || '').appendTo(
+            $('<div class="ha-sub"><small>Button title</small></div>').appendTo(tiFields));
+          $('<input type="text" class="action-tiPlaceholder" placeholder="Type a reply…">').val(data.textInputPlaceholder || '').appendTo(
+            $('<div class="ha-sub"><small>Placeholder</small></div>').appendTo(tiFields));
+          var tiOn = data.behavior === 'textInput';
+          tiChk.find('input').prop('checked', tiOn);
+          tiFields.toggle(tiOn);
+          tiChk.find('input').on('change', function () { tiFields.toggle($(this).prop('checked')); });
 
           var tap = $('<div class="ha-tap">').appendTo(body);
           $('<div class="ha-tap-label">Tap-to-perform · optional</div>').appendTo(tap);
@@ -449,6 +464,15 @@
         if (targetService) action.targetService = targetService;
         const targetEntityId = $(this).find('.action-targetEntityId').val();
         if (targetEntityId) action.targetEntityId = targetEntityId;
+        const icon = $(this).find('.action-icon').val();
+        if (icon) action.icon = icon;
+        if ($(this).find('.action-textInput').prop('checked')) {
+          action.behavior = 'textInput';
+          const tb = $(this).find('.action-tiButton').val();
+          const tp = $(this).find('.action-tiPlaceholder').val();
+          if (tb) action.textInputButtonTitle = tb;
+          if (tp) action.textInputPlaceholder = tp;
+        }
         actions.push(action);
       });
       this.actions = actions;
