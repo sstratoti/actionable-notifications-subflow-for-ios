@@ -382,7 +382,7 @@
             .val(data.icon || '').appendTo(
               $('<div class="ha-sub"><small>Icon · optional</small></div>').appendTo(r2));
 
-          var r3 = $('<div class="ha-checks" style="grid-template-columns:1fr 1fr">').appendTo(body);
+          var r3 = $('<div class="ha-checks">').appendTo(body);
           var destr = $('<label class="ha-check"><input type="checkbox" class="action-destructive"> Destructive</label>').appendTo(r3);
           if (data.destructive) destr.find('input').prop('checked', true);
           var auth = $('<label class="ha-check"><input type="checkbox" class="action-authenticationRequired"> Requires auth</label>').appendTo(r3);
@@ -853,7 +853,7 @@
       <span class="ha-s-sub">TestFlight app required</span>
     </div>
     <div class="ha-section-body">
-      <p class="ha-note">⚠️ Live Activities require the <strong>TestFlight</strong> build of the HA iOS Companion App.</p>
+      <p class="ha-note">⚠️ Live Activities require the <strong>TestFlight</strong> build of the HA iOS Companion App (iOS 17.2+ · HA Core 2026.7+).</p>
       <label class="ha-check" style="margin-bottom:9px"><input type="checkbox" id="node-input-liveActivity"> Send as a Live Activity (live_update)</label>
       <div class="ha-grid ha-align-start">
         <label>Progress</label>
