@@ -1,4 +1,6 @@
-# Text-Input Actions & Category UI — Design Spec
+# Config-Panel Completion & Polish — Design Spec
+
+*(text-input actions · categoryName · action icon · action targetData drill-down · layout fixes · Live Activity "Beta" badge)*
 
 **Date:** 2026-07-18
 **Status:** Draft — awaiting Steve's review (brainstorming session, 2026-07-18)
@@ -18,6 +20,11 @@ or hand-authored JSON:
 3. **Action `icon`** — the SF Symbol shown on an action button (used 16× by the
    old subflow; the payload builder already passes `icon` through, but the action
    card has no control for it).
+4. **Action `targetData`** — service-data (JSON) for the tap-to-perform feature,
+   authored via a **drill-down JSON editor** (click to expand → edit → save →
+   return), with a filled/empty indicator on the parent field.
+5. **Config-panel layout fixes** (bugs found in review) — see "Config-panel
+   fixes" below.
 
 These are the last field-parity gaps vs the old `iOS Actionable Notification`
 subflow (a full UI audit confirmed everything else is exposed — sound via the
@@ -89,6 +96,49 @@ change for either text-input or icon (both already handled by `IOS_ACTION_PROPS`
 - In the `data.push` object (alongside `sound` / `interruption-level` / `badge`),
   add: `...(category ? { category } : {})`.
 
+## Config-panel fixes & additions (from review)
+
+All in `ha-ios-notification.html` (CSS + the `oneditprepare` builders).
+
+### Layout bugs
+- **Targets: always show ≥1 row.** The services `editableList` only adds rows for
+  existing `node.services` (l.282). After populating, if the list is empty, add
+  one empty row (`addItem({ deviceName: '' })`) so the first target line always
+  exists.
+- **"Actionable Buttons" label wraps.** It's a plain `.form-row label`, which
+  Node-RED caps at ~100px → the text wraps. Give this label
+  `display:block; width:auto` (a small class) so it sits on one line above the
+  list.
+- **Action checkboxes misaligned** ("Destructive" trailing gap, "Requires auth"
+  wraps). Root cause: `.ha-check` is a `<label>` and inherits Node-RED's ~100px
+  label width, so it's capped inside its `1fr` grid cell. Fix: `.ha-check { width:auto }`
+  and make `.ha-checks` a `display:flex; flex-wrap:wrap; gap:6px 18px` row so the
+  two checks sit naturally side-by-side.
+- **Combo caret: gap + inert.** Two issues: (1) in action cards the input isn't
+  full-width in `.ha-with-caret`, so the caret sits at the container edge (the
+  gap) — fix with `.ha-with-caret input { width:100%; box-sizing:border-box }`;
+  (2) `.ha-caret { pointer-events:none }` makes it decorative — remove that, add
+  `cursor:pointer`, and a click handler that opens the dropdown
+  (`input.focus(); input.autocomplete('search','')`). Apply to **all** caret
+  instances (action Service/Target-entity + the main-form camera/service/entity
+  pickers).
+
+### Action `targetData` — drill-down JSON editor
+- In each action card's tap-to-perform block, add a **"Service data (JSON)"**
+  control: a read-only summary field + an **Edit** affordance that opens
+  `RED.editor.editJSON({ value, complete })` (Node-RED's built-in JSON editor
+  overlay — click to drill in, Save/Done returns to the action card).
+- Store the result as `action.targetData` (object/JSON). On return, set a
+  **filled/empty indicator** on the parent (e.g. the summary shows `{…} set` vs
+  `empty`, or a filled dot). Pre-populate from `data.targetData` on load.
+- No payload change: `targetData` is already in `TAP_TARGET_PROPS`.
+
+### Live Activity "Beta" badge
+- Add a small **"Beta"** pill (`.ha-beta`) next to the Live Activity section's
+  `.ha-s-title`, and set its `.ha-s-sub` / a note in the body to: **"Requires the
+  TestFlight build of the HA iOS Companion App."** Purely presentational — a
+  `.ha-beta` CSS pill + the copy; no behavior change.
+
 ## Testing
 
 - **Unit (`test/unit`, Mocha):**
@@ -99,11 +149,19 @@ change for either text-input or icon (both already handled by `IOS_ACTION_PROPS`
     `textInputButtonTitle` + `textInputPlaceholder` (and `icon`) survives
     `normalizeActions` and lands in `data.actions[i]` with those props (guards the
     wiring the UI depends on).
-- **Editor UI (manual, `docs/TESTING.md` checklist):** add a checklist item —
-  create an action, tick "Text input", set button/placeholder, deploy, read back
-  the node JSON, confirm `behavior:"textInput"` + the two fields; and a Category
-  field round-trips to `categoryName`. (The config panel has no automated DOM
-  test harness — consistent with the existing redesign, which is manual-verified.)
+- **Editor UI (manual, `docs/TESTING.md` checklist):** add checklist items and
+  read back the node JSON to confirm each round-trips:
+  - Action "Text input" checkbox → `behavior:"textInput"` + button/placeholder.
+  - Action "Icon" → `action.icon`.
+  - Action "Service data" drill-down → `action.targetData` (JSON), with the
+    filled/empty indicator updating.
+  - "Category" field → `categoryName`.
+  - Layout: first target row always present; "Actionable Buttons" on one line;
+    Destructive/Requires-auth side-by-side without wrap; caret sits flush to the
+    input and **clicking it opens the dropdown**.
+  - Live Activity section shows the "Beta" pill + TestFlight note.
+  (The config panel has no automated DOM test harness — consistent with the
+  existing redesign, which is manual-verified.)
 
 ## Rollout to Node-RED (important — this is what bit us)
 
@@ -120,10 +178,6 @@ unambiguous, and add a CHANGELOG entry under the unreleased section.
 
 ## Out of scope
 
-- **Action `targetData`** (service-data for the tap-to-perform feature) — has no
-  UI control either, but it is a *new-feature nicety*, not a v1-subflow parity
-  gap. **Deferred** unless Steve opts it in (would be a small `.action-targetData`
-  JSON/textarea field alongside targetService/targetEntityId).
 - Android text-input behavior.
 - Pre-registered/static iOS categories beyond passing the name through (HA still
   auto-registers inline `actions`; a named category simply rides along on
