@@ -92,6 +92,7 @@
       name: { value: '' },
       server: { value: '', type: 'server', required: true },
       tag: { value: '' },
+      categoryName: { value: '' },
       services: { value: [] },
       group: { value: '' },
       title: { value: '' },
@@ -492,6 +493,8 @@
         <input type="text" id="node-input-group" placeholder="e.g. doorbell (stacks like notifications)">
         <label for="node-input-tag">Tag</label>
         <input type="text" id="node-input-tag" placeholder="auto-generated if left blank">
+        <label for="node-input-categoryName">Category</label>
+        <input type="text" id="node-input-categoryName" placeholder="optional · iOS category name">
         <label for="node-input-notificationUrl">Notification URL</label>
         <input type="text" id="node-input-notificationUrl" placeholder="/lovelace/cameras or https://…">
       </div>

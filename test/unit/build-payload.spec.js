@@ -407,3 +407,21 @@ describe('build-payload: badge and presentation_options', () => {
     payloads[0].payload.data.data.presentation_options.should.eql(['badge']);
   });
 });
+
+describe('build-payload: category', () => {
+  it('emits data.push.category when categoryName is set', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig({ categoryName: 'parking' }), {});
+    payloads[0].payload.data.data.push.category.should.equal('parking');
+  });
+  it('omits category when categoryName is empty', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig({ categoryName: '' }), {});
+    payloads[0].payload.data.data.push.should.not.have.property('category');
+  });
+  it('lets a notificationBase override win', () => {
+    const { payloads } = buildNotificationPayloads(
+      baseConfig({ categoryName: 'a' }),
+      { notificationBase: { categoryName: 'b' } }
+    );
+    payloads[0].payload.data.data.push.category.should.equal('b');
+  });
+});
