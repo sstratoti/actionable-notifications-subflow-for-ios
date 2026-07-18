@@ -25,11 +25,6 @@
   .ha-section.ha-open > .ha-section-head .ha-chev { transform: rotate(90deg); }
   .ha-section-head .ha-s-title { font-weight: 600; }
   .ha-section-head .ha-s-sub { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; }
-  .ha-section-head .ha-s-count {
-    margin-left: auto; font-size: 11px; color: var(--red-ui-secondary-text-color, #888);
-    background: var(--red-ui-secondary-background, #fff); border-radius: 10px; padding: 0 8px;
-    border: 1px solid var(--red-ui-secondary-border-color, #d5d5da);
-  }
   .ha-section-body { padding: 10px; display: none; background: var(--red-ui-secondary-background, transparent); }
   .ha-section.ha-open > .ha-section-body { display: block; }
   .ha-note { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; margin: 0 0 9px; }
@@ -66,8 +61,6 @@
 
   /* device picker rows (already present feature, restyled to match) */
   .ha-target-hint { color: var(--red-ui-secondary-text-color, #888); font-size: 12px; }
-  .ha-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; flex: none; }
-  .ha-chip-ios { color: #1a6dff; background: rgba(74,144,255,0.14); }
 
   /* segmented foreground control (multi-select) */
   .ha-seg { display: inline-flex; border: 1px solid var(--red-ui-form-input-border-color, #ccc); border-radius: 5px; overflow: hidden; }
@@ -234,7 +227,7 @@
             .val((data && data.deviceName) || '')
             .appendTo(container)
             .addClass('ha-target-input');
-          const $hint = $('<span class="ha-target-hint" style="flex:1; color:#888; font-size:0.85em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">').appendTo(container);
+          const $hint = $('<span class="ha-target-hint" style="flex:1; font-size:0.85em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">').appendTo(container);
           updateTargetHint($hint, input.val());
 
           input.autocomplete({
@@ -307,7 +300,7 @@
         .map(function (t) { return { label: t, value: t }; });
       haCombo($('#node-input-contentType'), function (term) {
         var t = term.toLowerCase();
-        return haContentTypes.filter(function (o) { return o.value.indexOf(t) !== -1; });
+        return haContentTypes.filter(function (o) { return o.value.toLowerCase().indexOf(t) !== -1; });
       });
 
       var haServiceOptions = [];
@@ -511,7 +504,7 @@
     <div class="ha-section-body">
   <div class="form-row" style="margin-bottom:0;">
     <label style="width:auto;">Notify Devices</label>
-    <div style="color:#888; font-size:0.85em; margin:2px 0 6px 0;">
+    <div style="color:var(--red-ui-secondary-text-color, #888); font-size:0.85em; margin:2px 0 6px 0;">
       Type to search. iOS devices are suggested by default; you can still type any notify target. Click <b>add</b> for more devices.
     </div>
     <ol id="node-input-services-container"></ol>
