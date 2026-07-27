@@ -465,3 +465,40 @@ describe('build-payload: legacy top-level notificationOverride (v1 subflow compa
     payloads[0].payload.data.title.should.equal('T');
   });
 });
+
+describe('build-payload: legacy top-level media fields (v1 subflow compat)', () => {
+  it('honors a top-level imagePath, as the v1 Frigate flows emit it', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {
+      message: 'Person in the backyard!',
+      imagePath: '/api/image_proxy/image.backyard_person',
+    });
+    payloads[0].payload.data.data.image.should.equal('/api/image_proxy/image.backyard_person');
+    payloads[0].payload.data.message.should.equal('Person in the backyard!');
+  });
+
+  it('honors top-level videoPath, audioPath and contentUrl', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {
+      videoPath: '/v.mp4', audioPath: '/a.caf', contentUrl: 'https://example.test/x',
+    });
+    const data = payloads[0].payload.data.data;
+    data.video.should.equal('/v.mp4');
+    data.audio.should.equal('/a.caf');
+    data.attachment.url.should.equal('https://example.test/x');
+  });
+
+  it('lets an explicit media block win over the top-level shape', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {
+      imagePath: '/top-level.jpg',
+      media: { imagePath: '/nested-wins.jpg' },
+    });
+    payloads[0].payload.data.data.image.should.equal('/nested-wins.jpg');
+  });
+
+  it('still lets a per-service media override win over both', () => {
+    const config = baseConfig({
+      services: [{ deviceName: 'my_iphone', serviceOverride: { media: { imagePath: '/svc.jpg' } } }],
+    });
+    const { payloads } = buildNotificationPayloads(config, { imagePath: '/top-level.jpg' });
+    payloads[0].payload.data.data.image.should.equal('/svc.jpg');
+  });
+});
