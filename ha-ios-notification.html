@@ -108,6 +108,10 @@
       userInfo: { value: false },
       isClearNotificationsOnAction: { value: false },
       actions: { value: [] },
+      // Required for Node-RED to honor per-instance dynamic output counts
+      // (same pattern as the core Function node). Without this, the editor
+      // always draws 0 ports even when flows.json has outputs > 0 + wires.
+      outputs: { value: 0 },
       firstLatitude: { value: '' },
       firstLongitude: { value: '' },
       secondLatitude: { value: '' },
@@ -148,6 +152,11 @@
     defaults: haDefaults,
     inputs: 1,
     outputs: 0,
+    outputLabels: function (index) {
+      const actions = this.actions || [];
+      const title = actions[index] && actions[index].title;
+      return title || ('Action ' + (index + 1));
+    },
     icon: 'font-awesome/fa-mobile-phone',
     paletteLabel: 'HA iOS Notification',
     label: function () {

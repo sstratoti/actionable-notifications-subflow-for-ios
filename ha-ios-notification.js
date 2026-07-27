@@ -297,13 +297,34 @@ module.exports = function (RED) {
 
     const outputs = new Array(node.outputCount).fill(null);
     outputs[actionIndex] = outMsg;
-    node.status({ text: `action ${actionId} received`, shape: 'dot', fill: 'green' });
+
+    const matchedAction = node.actions[actionIndex];
+    const overrideActions =
+      (owned.message &&
+        owned.message.notificationOverride &&
+        owned.message.notificationOverride.actions) ||
+      {};
+    const overrideTitle =
+      overrideActions[actionId] &&
+      overrideActions[actionId].title !== undefined &&
+      overrideActions[actionId].title !== null &&
+      overrideActions[actionId].title !== ''
+        ? String(overrideActions[actionId].title)
+        : '';
+    const actionTitle =
+      overrideTitle ||
+      (matchedAction && matchedAction.title) ||
+      String(actionId);
+    node.status({
+      text: `Action ${actionIndex + 1}: ${actionTitle}`,
+      shape: 'dot',
+      fill: 'green',
+    });
     node.send(outputs);
 
     // [REV2] Tap-to-perform: call the HA service configured on the matched action
     // (raw node.actions config, not the outbound payload) in addition to emitting
     // on its output. targetService/targetEntityId/targetData never touch outMsg.
-    const matchedAction = node.actions[actionIndex];
     if (matchedAction && matchedAction.targetService) {
       const dot = String(matchedAction.targetService).indexOf('.');
       const domain = dot > 0 ? matchedAction.targetService.slice(0, dot) : '';
