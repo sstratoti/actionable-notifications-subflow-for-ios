@@ -425,3 +425,43 @@ describe('build-payload: category', () => {
     payloads[0].payload.data.data.push.category.should.equal('b');
   });
 });
+
+describe('build-payload: legacy top-level notificationOverride (v1 subflow compat)', () => {
+  it('honors a top-level title/message, as the v1 subflow emitted them', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {
+      title: 'Honda is parked on South 16th Street',
+      message: 'Please move it before we get a ticket!',
+    });
+    payloads[0].payload.data.title.should.equal('Honda is parked on South 16th Street');
+    payloads[0].payload.data.message.should.equal('Please move it before we get a ticket!');
+  });
+
+  it('renders top-level overrides even when the node config has empty title/message', () => {
+    const config = baseConfig({ title: '', message: '' });
+    const { payloads } = buildNotificationPayloads(config, {
+      title: 'Set by the flow',
+      message: 'Body set by the flow',
+    });
+    payloads[0].payload.data.title.should.equal('Set by the flow');
+    payloads[0].payload.data.message.should.equal('Body set by the flow');
+  });
+
+  it('lets an explicit notificationBase win over the top-level shape', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig(), {
+      title: 'top level',
+      notificationBase: { title: 'nested wins' },
+    });
+    payloads[0].payload.data.title.should.equal('nested wins');
+  });
+
+  it('does not treat top-level services/tag/actions as base fields', () => {
+    const { payloads } = buildNotificationPayloads(baseConfig({ tag: 'cfg' }), {
+      tag: 'override-tag',
+      services: [{ deviceName: 'my_iphone' }],
+      title: 'T',
+    });
+    payloads.should.have.length(1);
+    payloads[0].tag.should.equal('OVERRIDE_TAG'); // sanitizeTag normalizes
+    payloads[0].payload.data.title.should.equal('T');
+  });
+});
